@@ -1,0 +1,46 @@
+{
+  "name": "simplememo",
+  "version": "1.0.0",
+  "description": "Electron製のシンプルなメモ帳",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ./src/main.js",
+    "build": "electron-builder --win --x64"
+  },
+  "build": {
+    "extends": null,
+    "extraMetadata": {
+      "main": "./src/main.js"
+    },
+    "appId": "com.electron.SimpleMemo",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": "7z"
+    }
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^30.0.1",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.49.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.28.1",
+    "eslint-plugin-n": "^16.0.2",
+    "eslint-plugin-promise": "^6.1.1"
+  },
+  "dependencies": {
+    "encoding-japanese": "^1.0.30",
+    "legally": "^3.5.10",
+    "license-checker": "^25.0.1",
+    "mousetrap": "^1.6.5"
+  }
+}

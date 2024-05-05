@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>SimpleMemo</title>
+        <link rel="stylesheet" href="css/index.css">
+        <script src="js/mousetrap.js" charset="utf-8"></script>
+        <script src="js/index.js" charset="utf-8"></script>
+    </head>
+    <body style="background-color: rgb(255, 255, 255);">
+        <!-- <textarea style="resize: none; width: 90vw; height: 90vh" name="textarea_1"></textarea> -->
+        <!-- position fixedで位置固定できるかも -->
+        <!-- <textarea style="resize: none; width: 90%; height: 90vh" name="textarea_1"></textarea> -->
+        <button id="sheet_button" onclick="nextPage()" oncontextmenu="prevPage()">1</button>
+        <button id="save_button" onclick="saveFile()">Save</button>
+        <input type="text" id="filename_textbox_0" class="mousetrap" spellcheck="false">
+        <input type="text" id="filename_textbox_1" class="mousetrap" spellcheck="false" style="display:none">
+        <input type="text" id="filename_textbox_2" class="mousetrap" spellcheck="false" style="display:none">
+
+        <!-- 非表示はdisplay:none, visiblity:hidden, hidden で検討する（速度、スクロールバーなどを考慮 -->
+        <textarea spellcheck="false" class="mousetrap" style="background-color: honeydew; " id="textarea_0" ></textarea>
+        <textarea spellcheck="false" class="mousetrap" style="background-color: oldlace; display:none" id="textarea_1" ></textarea>
+        <textarea spellcheck="false" class="mousetrap" style="background-color: azure; display:none" id="textarea_2" ></textarea>
+    </body>
+</html>
