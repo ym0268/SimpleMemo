@@ -885,7 +885,8 @@ class MemoSetting {
       const fontsize = data.fontsize;
       if (!fs.existsSync(data.savepath)) {
         /* 保存先確認エラー */
-        error = MEMO_ERROR.NO_DIR;
+        /* 保存先が誤っていてもここでは何もしない（メモ保存時に判定する） */
+        /* error = MEMO_ERROR.NO_DIR; */
       } else if ((fontsize == null) || (fontsize <= 0)) {
         /* フォントサイズ確認エラー */
         error = MEMO_ERROR.INV_FONTSIZE;
