@@ -1043,7 +1043,7 @@ app.on('window-all-closed', () => {
 });
 
 // アプリがアクティブになった時の処理
-app.on('actiivate', () => {
+app.on('activate', () => {
   // メインウィンドウが閉じられている場合は新しく開く
   if (mainWindow === null) {
     createWindow();
