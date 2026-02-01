@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   // TODO async awaitを入れる
@@ -14,3 +14,4 @@ contextBridge.exposeInMainWorld('api', {
 
   on: (channel, callback) => ipcRenderer.on(channel, (e, argv) => callback(e, argv)),
 });
+contextBridge.exposeInMainWorld('webUtils', webUtils);

@@ -299,8 +299,9 @@ function setDragAndDrop () {
       if (e.dataTransfer.files.length > 0) {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
+        const filepath = webUtils.getPathForFile(file);
         const data = {
-          path: file.path,
+          path: filepath,
           pagenum: nowPage,
         };
         console.log(data);
