@@ -216,7 +216,7 @@ class EncodingConverter {
 class Memo {
   constructor (defaultSavePath, defaultEncoding = 'UTF8', autoencoding = true) {
     // 定数
-    this.fname_check_pattern = /^.*[\\|/|:|\*|?|\"|<|>|\|].*$/; // ファイル名チェック用パターン（要検討）
+    this.fname_check_pattern = /^.*[\\/:*?"<>|].*$/; // ファイル名チェック用パターン（要検討）
     this.JS_ENCODE = 'UNICODE';     // Javascript内で扱うエンコード
 
     // グローバル設定
@@ -492,7 +492,7 @@ class Memo {
       // 外部読込ファイルの場合、拡張子の付与有無が変更になった場合も考慮する（拡張子付与したときに既存ファイルと重複した場合を考慮すること）
 
       const tmpIsExternalFile = this._isExternalFile; // 保存前の外部ファイルフラグを保存
-      tmpEncoding = this.encoding
+      tmpEncoding = this.encoding;
 
       let filenameWithExt = this.addExtension(filename); // 拡張子付加
       let savepath = path.join(this.savedirpath, filenameWithExt);
@@ -529,7 +529,7 @@ class Memo {
         this.unsaved = false;       // 保存済みに変更
       } catch (e) {
         this.encoding = tmpEncoding;  // エンコードを元に戻す
-        this._isExternalFile = tmpIsExternalFile
+        this._isExternalFile = tmpIsExternalFile;
         switch (e.code) {
           case 'ENOENT':
             error = MEMO_ERROR.NO_ENTRY;
@@ -942,7 +942,7 @@ class MemoSetting {
           break;
         default:
           error = MEMO_ERROR.ERROR;
-          console.log("MemoSetting load error.")
+          console.log("MemoSetting load error.");
           break;
       }
     }
