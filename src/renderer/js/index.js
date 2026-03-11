@@ -299,8 +299,9 @@ function setDragAndDrop () {
       if (e.dataTransfer.files.length > 0) {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
+        const filepath = webUtils.getPathForFile(file);
         const data = {
-          path: file.path,
+          path: filepath,
           pagenum: nowPage,
         };
         console.log(data);
@@ -413,7 +414,7 @@ window.api.on('save-result', (event, result) => {
 });
 
 window.api.on('file-load-result', (event, result) => {
-  if (result !== null || result.error === 0) {  // 読込成功
+  if (result !== null && result.error === 0) {  // 読込成功
     console.log('読込成功');
     const txtarea = getTextarea(result.pagenum);
     const filenameBox = getFilenameTextbox(result.pagenum);
@@ -421,6 +422,8 @@ window.api.on('file-load-result', (event, result) => {
 
     txtarea.value = result.text;
     filenameBox.value = result.filename;
+    unsaveList[result.pagenum] = false;
+    updateUnsavedStatus(unsaveList[nowPage]);
   }
 });
 
@@ -454,7 +457,7 @@ window.api.on('clear-memo', (event, data) => {
 window.api.on('set-settings', (event, settings) => {
   for (let i = 0; i < MAX_PAGENUM; i++) {
     const txtarea = getTextarea(i);
-    txtarea.style.fontSize = setFontSize(settings.fontsize);
+    setFontSize(settings.fontsize);
     txtarea.style.fontFamily = settings.font;
   }
 });

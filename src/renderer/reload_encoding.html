@@ -3,6 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
+    <!-- TODO: move inline onclick handlers to addEventListener, move inline styles to CSS, then remove 'unsafe-inline' from CSP -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';">
     <link rel="stylesheet" href="css/main_setting.css">
     <script src="js/reload_encoding.js" , charset="utf-8"></script>
     <title>読込文字コード変更 - SimpleMemo</title>

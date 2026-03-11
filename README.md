@@ -62,5 +62,9 @@ npm run build   // Windows用にビルド
 記載予定
 
 ## 変更履歴
+v1.0.1
+ Electron v40に更新
+ バグ修正
+
 v1.0.0
  初版
