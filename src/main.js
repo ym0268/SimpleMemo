@@ -926,6 +926,12 @@ class MemoSetting {
 
     try {
       buf = fs.readFileSync(filepath, { encoding: 'utf8' });
+      /* バージョンチェック(未実装) */
+      if (error === MEMO_ERROR.OK) {
+        /* 値のセット */
+        const settings = JSON.parse(buf);
+        error = this.set(settings);
+      }
     } catch (e) {
       switch (e.code) {
         case 'ENOENT':
@@ -936,16 +942,11 @@ class MemoSetting {
           break;
         default:
           error = MEMO_ERROR.ERROR;
+          console.log("MemoSetting load error.")
           break;
       }
     }
-    /* バージョンチェック(未実装) */
-    if (error === MEMO_ERROR.OK) {
-      /* 値のセット */
-      /* TODO: settings.jsonが壊れている場合の例外処理が入っていない */
-      const settings = JSON.parse(buf);
-      error = this.set(settings);
-    }
+    
     return error;
   }
 
