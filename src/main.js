@@ -1164,7 +1164,7 @@ function createVersionWindow () {
   versionWindow = new BrowserWindow({
     x: mainWindowPos[0],
     y: mainWindowPos[1],
-    width: USE_DEV_TOOL ? 450 : 250,
+    width: USE_DEV_TOOL ? 650 : 400,
     height: 200,
     parent: mainWindow,
     modal: true,
