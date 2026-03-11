@@ -482,17 +482,36 @@ class Memo {
     } else if (this.checkFilename(filename) !== MEMO_ERROR.OK) {
       error = MEMO_ERROR.INV_FNAME;
     } else {
-      const filenameWithExt = this.addExtension(filename); // 拡張子付加
-      const savepath = path.join(this.savedirpath, filenameWithExt);
+      // - 新規作成ファイルの初回保存
+      // - 新規作成ファイルの2回目以降の保存
+      // - 新規作成ファイルの2回目以降の保存で、ファイル名を変更した場合
+      // - 外部読込ファイルの上書き保存
+      // - 外部読込ファイルを保存せずに、ファイル名を変更して保存した場合
+      // - 外部読込ファイルを保存した後、ファイル名を変更して保存した場合
+      // 上記それぞれで既存ファイル名と重複する場合を考慮する
+      // 外部読込ファイルの場合、拡張子の付与有無が変更になった場合も考慮する（拡張子付与したときに既存ファイルと重複した場合を考慮すること）
+
+      const tmpIsExternalFile = this._isExternalFile; // 保存前の外部ファイルフラグを保存
+      tmpEncoding = this.encoding
+
+      let filenameWithExt = this.addExtension(filename); // 拡張子付加
+      let savepath = path.join(this.savedirpath, filenameWithExt);
+      if( (this._isExternalFile === true) && (savepath !== this.savepath) ) {
+        // 外部読込後にファイル名を変更した場合
+        this._isExternalFile = false;  // 新規保存扱いにする
+        filenameWithExt = this.addExtension(filename); // 拡張子付加
+        // savepath = path.join(this.savedirpath, filenameWithExt);
+        savepath = path.join(this.defaultSavePath, filenameWithExt); // 保存先はデフォルト保存先に変更
+      }
 
       // 外部読み込みファイル、上書き可または保存先が前回と一致した場合は上書きモード
       if ((this._isExternalFile === true) || (overwrite === true) || (savepath === this.savepath)) {
         wFlag = 'w';
       }
 
-      // 外部ファイルではなく、新規保存だと思われる場合はデフォルトエンコーディングをセット */
-      if ((this._isExternalFile === false) && (savepath !== this.savepath)) {
-        tmpEncoding = this.encoding;   // 保存失敗時用
+      // 外部ファイルではなく、新規保存だと思われる場合はデフォルトエンコーディングをセット
+      // もともと外部読込ファイルだった場合は変更しない（外部読込後にファイル名を変更した場合）
+      if ((tmpIsExternalFile === false) && (savepath !== this.savepath)) {
         this.encoding = this.defaultEncoding;
       }
 
@@ -510,6 +529,7 @@ class Memo {
         this.unsaved = false;       // 保存済みに変更
       } catch (e) {
         this.encoding = tmpEncoding;  // エンコードを元に戻す
+        this._isExternalFile = tmpIsExternalFile
         switch (e.code) {
           case 'ENOENT':
             error = MEMO_ERROR.NO_ENTRY;
@@ -922,6 +942,7 @@ class MemoSetting {
     /* バージョンチェック(未実装) */
     if (error === MEMO_ERROR.OK) {
       /* 値のセット */
+      /* TODO: settings.jsonが壊れている場合の例外処理が入っていない */
       const settings = JSON.parse(buf);
       error = this.set(settings);
     }
@@ -1401,6 +1422,7 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
         noLink: true,
       });
       if (ret === 0) {  // OK
+        clearMemo();  // 未保存フラグ'*'を消すために実行
         memoData = loadMemo(data, { ignoreFsize, overwrite: true });
       }
       break;

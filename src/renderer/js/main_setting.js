@@ -58,9 +58,10 @@ window.api.on('global-setting-get-result', (event, result) => {
   document.getElementById('topmost_checkbox').checked = settings.topMost;
 
   /* 高度な設定 */
-  document.getElementById('load_lastfile_checkbox').checked = settings.loadLastFile;
-  document.getElementById('no_close_dialog_checkbox').checked = settings.noCloseDialog;
-  document.getElementById('autosave_checkbox').checked = settings.autoSave;
-  document.getElementById('autosave_input').value = settings.autoSaveSpan;
-  document.getElementById('autolock_checkbox').value = settings.autoLock;
+  // 未実装
+  // document.getElementById('load_lastfile_checkbox').checked = settings.loadLastFile;
+  // document.getElementById('no_close_dialog_checkbox').checked = settings.noCloseDialog;
+  // document.getElementById('autosave_checkbox').checked = settings.autoSave;
+  // document.getElementById('autosave_input').value = settings.autoSaveSpan;
+  // document.getElementById('autolock_checkbox').value = settings.autoLock;
 });
