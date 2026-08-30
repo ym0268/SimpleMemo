@@ -32,6 +32,110 @@ let memoManager = null;      // メモ管理オブジェクト
 
 const USE_DEV_TOOL = false;     // デバッグ用：developer toolを表示するか
 
+// ======== ログ設定 ===========
+// 環境変数 SIMPLEMEMO_LOG_LEVEL で OFF/ERROR/WARN/INFO/DEBUG/TRACE を指定可能
+const LOG_LEVEL = Object.freeze({
+  OFF: -1,
+  ERROR: 0,
+  WARN: 1,
+  INFO: 2,
+  DEBUG: 3,
+  TRACE: 4,
+});
+const LOG_LEVEL_NAME = Object.freeze({
+  [-1]: 'OFF',
+  0: 'ERROR',
+  1: 'WARN',
+  2: 'INFO',
+  3: 'DEBUG',
+  4: 'TRACE',
+});
+const DEFAULT_LOG_LEVEL_NAME = app.isPackaged ? 'ERROR' : 'DEBUG';
+const requestedLogLevelName = (process.env.SIMPLEMEMO_LOG_LEVEL || DEFAULT_LOG_LEVEL_NAME).toUpperCase();
+const CURRENT_LOG_LEVEL = Object.prototype.hasOwnProperty.call(LOG_LEVEL, requestedLogLevelName)
+  ? LOG_LEVEL[requestedLogLevelName]
+  : LOG_LEVEL[DEFAULT_LOG_LEVEL_NAME];
+const LOG_STRING_LIMIT = 512;
+
+/**
+ * デバッグログを出力する
+ * @param {Number} level LOG_LEVEL
+ * @param {String} functionName 呼出元関数名
+ * @param {String} message メッセージ
+ * @param {*} details 付加情報
+ * @note detailsの表示仕様
+ *   - JSON形式で出力する
+ *   - Errorはname、message、code、stackを持つオブジェクトとして出力する
+ *   - Bufferは内容を省略し、typeとlengthを出力する
+ *   - LOG_STRING_LIMITを超える文字列は内容を省略し、type、length、omittedを出力する
+ *   - 循環参照は"[Circular]"として出力する
+ *   - JSON変換に失敗した場合はlogSerializationErrorを出力する
+ */
+function debugPrint (level, functionName, message = '', details = null) {
+  if ((CURRENT_LOG_LEVEL === LOG_LEVEL.OFF) || (level > CURRENT_LOG_LEVEL)) {
+    return;
+  }
+
+  let detailsText = '';
+  if (details !== null && details !== undefined) {
+    try {
+      const seen = new WeakSet();
+      detailsText = ' ' + JSON.stringify(details, (key, value) => {
+        if (value instanceof Error) {
+          return {
+            name: value.name,
+            message: value.message,
+            code: value.code,
+            stack: value.stack,
+          };
+        }
+        if (Buffer.isBuffer(value)) {
+          return { type: 'Buffer', length: value.length };
+        }
+        if (typeof value === 'string' && value.length > LOG_STRING_LIMIT) {
+          return { type: 'String', length: value.length, omitted: true };
+        }
+        if (value !== null && typeof value === 'object') {
+          if (seen.has(value)) {
+            return '[Circular]';
+          }
+          seen.add(value);
+        }
+        return value;
+      });
+    } catch (error) {
+      detailsText = ` {"logSerializationError":${JSON.stringify(error.message)}}`;
+    }
+  }
+
+  const output = `[${new Date().toISOString()}] [${LOG_LEVEL_NAME[level] || 'UNKNOWN'}] [${functionName}] ${message}${detailsText}`;
+  if (level === LOG_LEVEL.ERROR) {
+    console.error(output);
+  } else if (level === LOG_LEVEL.WARN) {
+    console.warn(output);
+  } else {
+    console.log(output);
+  }
+}
+
+/**
+ * 関数入口のTRACEログを出力する。
+ * ログ基盤自身は再帰を避けるためTRACE対象外とする。
+ * @param {String} functionName 関数名
+ * @param {*} args 引数情報
+ */
+function debugTrace (functionName, args = null) {
+  debugPrint(LOG_LEVEL.TRACE, functionName, '', args);
+}
+
+if (requestedLogLevelName !== LOG_LEVEL_NAME[CURRENT_LOG_LEVEL]) {
+  debugPrint(LOG_LEVEL.WARN, 'logger', 'Invalid log level. Default level is used.', {
+    requested: requestedLogLevelName,
+    fallback: LOG_LEVEL_NAME[CURRENT_LOG_LEVEL],
+  });
+}
+debugPrint(LOG_LEVEL.INFO, 'logger', 'Logger initialized.', { level: LOG_LEVEL_NAME[CURRENT_LOG_LEVEL] });
+
 const MEMO_ERROR = {
   OK: 0,    // エラーなし
 
@@ -87,6 +191,10 @@ class EncodingConverter {
    * @return {String | null} 検出したBOMの種類. BOMがなければnull
    */
   static checkBOM (text) {
+    debugTrace('EncodingConverter.checkBOM', {
+      textType: typeof text,
+      textLength: text?.length ?? null,
+    });
     let result = null;
     let textarr = null;
     if (typeof (text) === 'string') {
@@ -116,6 +224,11 @@ class EncodingConverter {
    * @return {String}     BOMを付加したテキスト
    */
   static addBOM (text, enc) {
+    debugTrace('EncodingConverter.addBOM', {
+      textType: typeof text,
+      textLength: text?.length ?? null,
+      encoding: enc,
+    });
     let textarr = text;
     if (typeof (text) === 'string') {
       textarr = encoding.stringToCode(text);
@@ -143,6 +256,10 @@ class EncodingConverter {
    * @return {String}     BOMを削除した文字列
    */
   static removeBOM (text) {
+    debugTrace('EncodingConverter.removeBOM', {
+      textType: typeof text,
+      textLength: text?.length ?? null,
+    });
     let textarr = text;
     if (typeof (text) === 'string') {
       textarr = encoding.stringToCode(text);
@@ -164,10 +281,16 @@ class EncodingConverter {
    * @return {Object} {encoding: 文字コード, bom: BOMの有無}
    */
   static detect (data, defaultEncoding) {
+    debugTrace('EncodingConverter.detect', {
+      dataType: typeof data,
+      dataLength: data?.length ?? null,
+      defaultEncoding,
+    });
     let bom = null;
     let enc = encoding.detect(data);
     if (enc === false || !Object.keys(ENCODING_TABLE).includes(enc)) { // UNICODE許容
       // 文字コード推定失敗
+      debugPrint(LOG_LEVEL.WARN, 'EncodingConverter.detect', 'Encoding detection failed. Use default encoding.', { defaultEncoding: defaultEncoding });
       enc = defaultEncoding;
     } else {
       // UTF16 BE or LE判定
@@ -191,9 +314,16 @@ class EncodingConverter {
    * @return {String} 変換後の文字列
    */
   static convert (data, params) {
+    debugTrace('EncodingConverter.convert', {
+      dataType: typeof data,
+      dataLength: data?.length ?? null,
+      params,
+    });
     // typeはstringのみ対応
     if (params.type !== 'string') {
-      throw new Error('[EncodingConverter.convert()] params[\'type\'] can only specify \'string\'.');
+      const error = new Error('[EncodingConverter.convert()] params[\'type\'] can only specify \'string\'.');
+      debugPrint(LOG_LEVEL.ERROR, 'EncodingConverter.convert', 'Unsupported conversion type.', { error, params });
+      throw error;
     }
     let ret = encoding.convert(data, params);
     // BOMの付加、削除（bomがnullなら何もしない）
@@ -215,6 +345,7 @@ class EncodingConverter {
  */
 class Memo {
   constructor (defaultSavePath, defaultEncoding = 'UTF8', autoencoding = true) {
+    debugTrace('Memo.constructor', { defaultSavePath, defaultEncoding, autoencoding });
     // 定数
     this.fname_check_pattern = /^.*[\\/:*?"<>|].*$/; // ファイル名チェック用パターン（要検討）
     this.JS_ENCODE = 'UNICODE';     // Javascript内で扱うエンコード
@@ -239,6 +370,7 @@ class Memo {
   }
 
   get isExternalFile () {
+    debugTrace('Memo.isExternalFile', { isExternalFile: this._isExternalFile });
     return this._isExternalFile;
   }
 
@@ -246,6 +378,7 @@ class Memo {
    * 未保存フラグを立てる
    */
   setUnsaved () {
+    debugTrace('Memo.setUnsaved');
     this.unsaved = true;
   }
 
@@ -254,6 +387,7 @@ class Memo {
    * @return {Boolean} 未保存ならtrue
    */
   getUnsaved () {
+    debugTrace('Memo.getUnsaved', { unsaved: this.unsaved });
     return this.unsaved;
   }
 
@@ -264,6 +398,11 @@ class Memo {
    * @return {String}                 文字コード種別
    */
   detectEncoding (data, defaultEncoding) {
+    debugTrace('Memo.detectEncoding', {
+      dataType: typeof data,
+      dataLength: data?.length ?? null,
+      defaultEncoding,
+    });
     const ret = EncodingConverter.detect(data, defaultEncoding);
     let enc = ret.encoding;
     if ((enc === 'UTF8') && ret.bom === true) {
@@ -273,6 +412,7 @@ class Memo {
     } else if ((enc === 'UTF16BE') && ret.bom === true) {
       enc = 'UTF16BE_BOM';
     }
+    debugPrint(LOG_LEVEL.DEBUG, 'Memo.detectEncoding', 'Detected encoding.', { encoding: enc });
     return enc;
   }
 
@@ -285,6 +425,13 @@ class Memo {
    * @return {String}         変換後のテキスト
    */
   convertEncoding (text, { target, from, update = false } = {}) {
+    debugTrace('Memo.convertEncoding', {
+      textType: typeof text,
+      textLength: text?.length ?? null,
+      target,
+      from,
+      update,
+    });
     let res = null;
     if (from == null) {
       // 文字コード自動推定
@@ -297,10 +444,10 @@ class Memo {
       this.encoding = update ? from : this.encoding;  // 文字コード更新
     }
     if (target !== from) {
-      console.log('target=');
-      console.log(ENCODING_TABLE[target]);
-      console.log('from=');
-      console.log(ENCODING_TABLE[from]);
+      debugPrint(LOG_LEVEL.DEBUG, 'Memo.convertEncoding', 'Convert encoding.', {
+        target: ENCODING_TABLE[target],
+        from: ENCODING_TABLE[from],
+      });
       res = EncodingConverter.convert(text, {
         to: ENCODING_TABLE[target].encoding,
         from: ENCODING_TABLE[from].encoding,
@@ -318,6 +465,7 @@ class Memo {
    * UI側で呼び出すことを想定（文字コード変更画面など）
    */
   getFileInfo () {
+    debugTrace('Memo.getFileInfo');
     /* 必要になれば増やすこと */
     const info = {
       encoding: this.encoding,
@@ -342,20 +490,34 @@ class Memo {
    * TODO: UTF16の文字コード判別ができなくなった。
    */
   load (filepath, { ignoreFsize = false, overwrite = false, encoding = null } = {}) {
+    debugTrace('Memo.load', { filepath, ignoreFsize, overwrite, encoding });
     let err = MEMO_ERROR.OK;
     let buf = null;             // 読み込んだテキスト
     if (overwrite === false && (this.unsaved === true || this.savepath !== null)) {
       // メモが残っているか確認（未保存でも記入済みの場合、保存先パスがセットされている場合（一度保存したか、外部読み込みしたか））
       err = MEMO_ERROR.LEAVEMEMO;
+      debugPrint(LOG_LEVEL.WARN, 'Memo.load', 'Memo remains and overwrite is disabled.', {
+        error: err,
+        unsaved: this.unsaved,
+        savepath: this.savepath,
+        filepath,
+      });
     } else if (!fs.existsSync(filepath)) {
       /* ファイル存在確認 */
       /* TODO: ファイルのアクセス権限判定もすべき */
       err = MEMO_ERROR.NO_ENTRY;
+      debugPrint(LOG_LEVEL.WARN, 'Memo.load', 'File does not exist.', { error: err, filepath });
     } else {
       /* ファイルサイズ判定 */
       const stat = fs.statSync(filepath);
       if ((ignoreFsize === false) && (stat.size > FILE_WARNING_SIZE)) {
         err = MEMO_ERROR.LARGEFILE;
+        debugPrint(LOG_LEVEL.WARN, 'Memo.load', 'File exceeds warning size.', {
+          error: err,
+          filepath,
+          fileSize: stat.size,
+          warningSize: FILE_WARNING_SIZE,
+        });
       }
     }
     if (err === MEMO_ERROR.OK) {
@@ -364,6 +526,7 @@ class Memo {
         // buf = fs.readFileSync(filepath, {encoding:'binary'});
         buf = fs.readFileSync(filepath);
       } catch (e) {
+        debugPrint(LOG_LEVEL.ERROR, 'Memo.load', 'File read failed.', { filepath, error: e });
         switch (e.code) {    // TODO:仮実装
           case 'EBUSY':
             err = MEMO_ERROR.BUSY;
@@ -385,6 +548,11 @@ class Memo {
         const encodingCheck = this.checkEncodingName(encoding);
         if (encodingCheck !== MEMO_ERROR.OK) {
           err = MEMO_ERROR.PARAM;
+          debugPrint(LOG_LEVEL.ERROR, 'Memo.load', 'Invalid encoding parameter.', {
+            error: err,
+            encoding,
+            filepath,
+          });
         }
       }
       if (err === MEMO_ERROR.OK) {
@@ -409,6 +577,7 @@ class Memo {
    * @return {Boolean} セットに成功したか（ファイルが存在しない場合はfalse）
    */
   setExternalFile (fullpath) {
+    debugTrace('Memo.setExternalFile', { fullpath });
     this._isExternalFile = true;
     this.savedirpath = path.dirname(fullpath);
     this.filename = path.basename(fullpath);
@@ -421,6 +590,7 @@ class Memo {
    * @param {String} filename
    */
   setNewFile () {
+    debugTrace('Memo.setNewFile');
     this.savedirpath = this.defaultSavePath;
     this._isExternalFile = false;
     this.saveCount = 0;
@@ -433,6 +603,7 @@ class Memo {
    * @param {String} filename
    */
   addExtension (filename) {
+    debugTrace('Memo.addExtension', { filename });
     if (!this._isExternalFile) {
       filename = filename + '.txt';  // アプリ内作成ファイルの場合、拡張子を付加
     }
@@ -444,10 +615,15 @@ class Memo {
    * @param {String} filename
    */
   checkFilename (filename) {
+    debugTrace('Memo.checkFilename', { filename });
     let err = MEMO_ERROR.OK;
     const ret = this.fname_check_pattern.test(filename);
     if (ret) {
       err = MEMO_ERROR.INV_FNAME;
+      debugPrint(LOG_LEVEL.WARN, 'Memo.checkFilename', 'Invalid character is included in filename.', {
+        error: err,
+        filename,
+      });
     }
     return err;
   }
@@ -469,6 +645,13 @@ class Memo {
    *
    */
   save (filename, text, { overwrite = false } = {}) {
+    debugTrace('Memo.save', {
+      filename,
+      textLength: text?.length ?? null,
+      overwrite,
+      saveDirectory: this.savedirpath,
+      encoding: this.encoding,
+    });
     let error = MEMO_ERROR.OK;
     let wFlag = 'wx';           // デフォルトは上書き禁止モード
     let tmpEncoding = null;    // 保存失敗時に元のencodingに戻すための変数
@@ -476,11 +659,17 @@ class Memo {
     if (filename === null || filename === '') {
       // ファイル名が入力されていない
       error = MEMO_ERROR.NO_FILENAME;
+      debugPrint(LOG_LEVEL.WARN, 'Memo.save', 'Filename is empty.', { error });
     } else if (!fs.existsSync(this.savedirpath)) {
       // 保存先が存在しない
       error = MEMO_ERROR.NO_DIR;
+      debugPrint(LOG_LEVEL.WARN, 'Memo.save', 'Save directory does not exist.', {
+        error,
+        saveDirectory: this.savedirpath,
+      });
     } else if (this.checkFilename(filename) !== MEMO_ERROR.OK) {
       error = MEMO_ERROR.INV_FNAME;
+      debugPrint(LOG_LEVEL.WARN, 'Memo.save', 'Filename validation failed.', { error, filename });
     } else {
       // - 新規作成ファイルの初回保存
       // - 新規作成ファイルの2回目以降の保存
@@ -528,6 +717,12 @@ class Memo {
         this.saveCount++;           // 保存回数を更新
         this.unsaved = false;       // 保存済みに変更
       } catch (e) {
+        debugPrint(LOG_LEVEL.ERROR, 'Memo.save', 'File write failed.', {
+          savepath,
+          writeFlag: wFlag,
+          encoding: this.encoding,
+          error: e,
+        });
         this.encoding = tmpEncoding;  // エンコードを元に戻す
         this._isExternalFile = tmpIsExternalFile;
         switch (e.code) {
@@ -541,7 +736,6 @@ class Memo {
             error = MEMO_ERROR.BUSY;
             break;
           default:
-            console.log(e);
             error = MEMO_ERROR.ERROR;
             break;
         }
@@ -560,6 +754,7 @@ class Memo {
    * UI側クリア時にコールする
    */
   clear () {
+    debugTrace('Memo.clear');
     this.savedirpath = this.defaultSavePath;
     this.encoding = this.defaultEncoding;
     this._isExternalFile = false;
@@ -573,6 +768,7 @@ class Memo {
    * @param {String} newSavePath
    */
   setDefaultSavePath (newSavePath) {
+    debugTrace('Memo.setDefaultSavePath', { newSavePath });
     this.defaultSavePath = newSavePath;
     // 外部読み込みファイルでなければ保存先を変更する (一度保存済みのファイルも更新されるのは仕様)
     if (!this._isExternalFile) {
@@ -586,12 +782,16 @@ class Memo {
    * @return {MEMO_ERROR}
    */
   checkEncodingName (encoding) {
+    debugTrace('Memo.checkEncodingName', { encoding });
     let err = MEMO_ERROR.OK;
     if (encoding === 'UNICODE') {
       // UNICODEは内部処理にのみ使用
       err = MEMO_ERROR.ERROR;
     } else if (!Object.keys(ENCODING_TABLE).includes(encoding)) {
       err = MEMO_ERROR.ERROR;
+    }
+    if (err !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.ERROR, 'Memo.checkEncodingName', 'Invalid encoding name.', { error: err, encoding });
     }
     return err;
   }
@@ -602,6 +802,7 @@ class Memo {
    * @return {MEMO_ERROR}
    */
   setDefaultEncoding (newEncoding) {
+    debugTrace('Memo.setDefaultEncoding', { newEncoding });
     const err = this.checkEncodingName(newEncoding);
     if (err === MEMO_ERROR.OK) {
       this.defaultEncoding = newEncoding;
@@ -619,6 +820,7 @@ class Memo {
    * @return {MEMO_ERROR}
    */
   setEncoding (newEncoding) {
+    debugTrace('Memo.setEncoding', { newEncoding });
     const err = this.checkEncodingName(newEncoding);
     if (err === MEMO_ERROR.OK) {
       this.encoding = newEncoding;
@@ -631,6 +833,7 @@ class Memo {
    * @param {Boolean} autoencoding
    */
   setAutoEncoding (autoencoding) {
+    debugTrace('Memo.setAutoEncoding', { autoencoding });
     this.autoencoding = autoencoding;
   }
 }
@@ -638,6 +841,7 @@ class Memo {
 // メモ管理クラス
 class MemoManager {
   constructor (memoNum, memoSetting) {
+    debugTrace('MemoManager.constructor', { memoNum, memoSetting: memoSetting?.settings });
     this.memoNum = memoNum;
     this.memoSetting = memoSetting;
     this.memoList = [];
@@ -653,13 +857,28 @@ class MemoManager {
   }
 
   save (idx, filename, text, { overwrite = false } = {}) {
+    debugTrace('MemoManager.save', {
+      idx,
+      filename,
+      textLength: text?.length ?? null,
+      overwrite,
+    });
     const memo = this.memoList[idx];
     const ret = memo.save(filename, text, { overwrite });
     ret.pagenum = idx;   // ページ番号を付加
+    if (ret.error !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.WARN, 'MemoManager.save', 'Memo save failed.', {
+        error: ret.error,
+        idx,
+        filename,
+        overwrite,
+      });
+    }
     return ret;
   }
 
   load (idx, filename, { ignoreFsize = false, overwrite = false, encoding = null } = {}) {
+    debugTrace('MemoManager.load', { idx, filename, ignoreFsize, overwrite, encoding });
     let err = MEMO_ERROR.OK;
     let result = null;
 
@@ -670,6 +889,12 @@ class MemoManager {
           // すでにオープン済み
           err = MEMO_ERROR.ALREDYOPEN;
           result = { error: err };
+          debugPrint(LOG_LEVEL.WARN, 'MemoManager.load', 'File is already open on another page.', {
+            error: err,
+            requestedPage: idx,
+            openedPage: i,
+            filename,
+          });
           break;
         }
       }
@@ -679,6 +904,16 @@ class MemoManager {
     }
 
     result.pagenum = idx;    // ページ番号を付加
+    if (result.error !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.WARN, 'MemoManager.load', 'Memo load failed.', {
+        error: result.error,
+        idx,
+        filename,
+        ignoreFsize,
+        overwrite,
+        encoding,
+      });
+    }
     return result;
   }
 
@@ -687,6 +922,7 @@ class MemoManager {
    * @param {Number} idx 面番号
    */
   setUnsaved (idx) {
+    debugTrace('MemoManager.setUnsaved', { idx });
     this.memoList[idx].setUnsaved();
   }
 
@@ -694,6 +930,7 @@ class MemoManager {
    * 未保存の面番号リストを取得する
    */
   getUnsavedList () {
+    debugTrace('MemoManager.getUnsavedList');
     const unsavedList = [];
     for (let i = 0; i < this.memoNum; i++) {
       if (this.memoList[i].getUnsaved() === true) {
@@ -704,10 +941,12 @@ class MemoManager {
   }
 
   setPageNum (idx) {
+    debugTrace('MemoManager.setPageNum', { idx });
     this.pageNum = idx;
   }
 
   setFontSize (fontsize) {
+    debugTrace('MemoManager.setFontSize', { fontsize });
     this.memoSetting.settings.fontsize = fontsize;
   }
 
@@ -717,6 +956,7 @@ class MemoManager {
    * @return {Object} 対象の面番号と切り替え後のロック状態
    */
   toggleLockStatus (idx) {
+    debugTrace('MemoManager.toggleLockStatus', { idx });
     this.memoList[idx].locked = !this.memoList[idx].locked;
     const data = {
       pageNum: idx,
@@ -731,8 +971,12 @@ class MemoManager {
    * @return {Object} クリアした面番号
    */
   clearMemo (idx) {
+    debugTrace('MemoManager.clearMemo', { idx });
     if ((idx === null) || (idx === undefined) || (idx < 0) || (idx >= this.memoNum)) {
-      console.error('(clearMemo) インデックスが不正です');
+      debugPrint(LOG_LEVEL.ERROR, 'MemoManager.clearMemo', 'Invalid page index.', {
+        idx,
+        memoNum: this.memoNum,
+      });
     }
     this.memoList[idx].clear();
     const data = {
@@ -746,6 +990,7 @@ class MemoManager {
    * @return {Array} ロック状態のリスト
    */
   getLockStatus () {
+    debugTrace('MemoManager.getLockStatus');
     const lockList = [];
     for (let i = 0; i < this.memoNum; i++) {
       const memo = this.memoList[i];
@@ -758,6 +1003,7 @@ class MemoManager {
    * 現在の全体設定を取得する
    */
   getGlobalSetting () {
+    debugTrace('MemoManager.getGlobalSetting');
     return this.memoSetting.settings;
   }
 
@@ -766,6 +1012,7 @@ class MemoManager {
    * @return {Object} pageNumに設定されている面の情報
    */
   getLocalSetting () {
+    debugTrace('MemoManager.getLocalSetting', { pageNum: this.pageNum });
     const settings = {
       pagenum: this.pageNum,
       encoding: this.memoList[this.pageNum].encoding,
@@ -777,6 +1024,7 @@ class MemoManager {
    * UI用の設定を取得する
    */
   getUISetting () {
+    debugTrace('MemoManager.getUISetting');
     const uiSettings = {
       fontsize: this.memoSetting.settings.fontsize,
       font: this.memoSetting.settings.font,
@@ -797,6 +1045,7 @@ class MemoManager {
    * 全体設定をセットする
    */
   setGlobalSetting (data) {
+    debugTrace('MemoManager.setGlobalSetting', { data });
     const ret = this.memoSetting.set(data);
     if (ret === MEMO_ERROR.OK) {
       /* 各メモに値を反映 */
@@ -805,6 +1054,12 @@ class MemoManager {
         this.memoList[i].setDefaultEncoding(this.memoSetting.settings.encoding);
         this.memoList[i].setAutoEncoding(this.memoSetting.settings.autoEncoding);
       }
+    }
+    if (ret !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.ERROR, 'MemoManager.setGlobalSetting', 'Global setting validation failed.', {
+        error: ret,
+        data,
+      });
     }
     return ret;
   }
@@ -815,7 +1070,15 @@ class MemoManager {
    * @return {MEMO_ERROR}
    */
   setLocalSetting (data) {
+    debugTrace('MemoManager.setLocalSetting', { pageNum: this.pageNum, data });
     const ret = this.memoList[this.pageNum].setEncoding(data.encoding);
+    if (ret !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.ERROR, 'MemoManager.setLocalSetting', 'Local setting validation failed.', {
+        error: ret,
+        pageNum: this.pageNum,
+        data,
+      });
+    }
     return ret;
   }
 
@@ -824,9 +1087,15 @@ class MemoManager {
    * @param {String} filepath
    */
   loadSetting (filepath) {
+    debugTrace('MemoManager.loadSetting', { filepath });
     const err = this.memoSetting.load(filepath);
     this.setGlobalSetting(this.memoSetting.settings);
-    console.log('loadsetting=' + err);
+    if (err !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.WARN, 'MemoManager.loadSetting', 'Setting load failed. Current/default settings are used.', {
+        error: err,
+        filepath,
+      });
+    }
   }
 
   /**
@@ -834,14 +1103,18 @@ class MemoManager {
    * @param {String} filepath
    */
   saveSetting (filepath) {
+    debugTrace('MemoManager.saveSetting', { filepath });
     const err = this.memoSetting.save(filepath);
-    console.log('savesetting=' + err);
+    if (err !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.ERROR, 'MemoManager.saveSetting', 'Setting save failed.', { error: err, filepath });
+    }
   }
 }
 
 // メモの設定（データ構造を規定する）
 class MemoSetting {
   constructor () {
+    debugTrace('MemoSetting.constructor');
     this.VERSION = 0;
     /* 設定はプリミティブ型かつ非null */
     this.settings = {
@@ -867,34 +1140,44 @@ class MemoSetting {
    * @return {MEMO_ERROR} 判定結果
    */
   validate (data) {
+    debugTrace('MemoSetting.validate', { data });
     let error = MEMO_ERROR.OK;
     if (data == null) {
       /* 非null判定エラー */
-      console.log('validate_null');
       error = MEMO_ERROR.ERROR;
+      debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.validate', 'Setting is null.', { error });
     } else if (Object.keys(data).length !== Object.keys(this.settings).length) {
       /* 要素数判定エラー */
-      console.log('validate_num');
       error = MEMO_ERROR.ERROR;
+      debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.validate', 'Setting property count does not match.', {
+        error,
+        actualCount: Object.keys(data).length,
+        expectedCount: Object.keys(this.settings).length,
+      });
     } else {
       for (const [key, value] of Object.entries(data)) {
         // console.log('>>' + key);
         /* キーの存在確認 */
         if (!(key in this.settings)) {
-          console.log('validate_nokey');
           error = MEMO_ERROR.ERROR;
+          debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.validate', 'Unknown setting key.', { error, key });
           break;
         }
         /* 値の null or undefined 確認 */
         if ((value === null) || (value === undefined)) {
-          console.log('validate_val_null');
           error = MEMO_ERROR.ERROR;
+          debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.validate', 'Setting value is null or undefined.', { error, key });
           break;
         }
         /* 値の型確認 */
         if (typeof (value) !== typeof (this.settings[key])) {
-          console.log('validate_type');
           error = MEMO_ERROR.ERROR;
+          debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.validate', 'Setting value type does not match.', {
+            error,
+            key,
+            actualType: typeof value,
+            expectedType: typeof this.settings[key],
+          });
           break;
         }
       }
@@ -910,6 +1193,7 @@ class MemoSetting {
       } else if (!Number.isInteger(fontsize) || (fontsize <= 0)) {
         /* フォントサイズ確認エラー */
         error = MEMO_ERROR.INV_FONTSIZE;
+        debugPrint(LOG_LEVEL.WARN, 'MemoSetting.validate', 'Invalid font size.', { error, fontsize });
       }
     }
     return error;
@@ -921,6 +1205,7 @@ class MemoSetting {
    * @return {MEMO_ERROR} 設定の読込に成功したか
    */
   load (filepath) {
+    debugTrace('MemoSetting.load', { filepath });
     let buf = null;             // JSON形式の設定格納用
     let error = MEMO_ERROR.OK;
 
@@ -933,6 +1218,10 @@ class MemoSetting {
         error = this.set(settings);
       }
     } catch (e) {
+      debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.load', 'Setting file load or parse failed.', {
+        filepath,
+        error: e,
+      });
       switch (e.code) {
         case 'ENOENT':
           error = MEMO_ERROR.NO_ENTRY;
@@ -942,7 +1231,6 @@ class MemoSetting {
           break;
         default:
           error = MEMO_ERROR.ERROR;
-          console.log("MemoSetting load error.");
           break;
       }
     }
@@ -956,11 +1244,16 @@ class MemoSetting {
    * @return {MEMO_ERROR} 設定の保存に成功したか
    */
   save (filepath) {
+    debugTrace('MemoSetting.save', { filepath });
     let error = MEMO_ERROR.OK;
     const jsonstr = JSON.stringify(this.settings);
     try {
       fs.writeFileSync(filepath, jsonstr, { flag: 'w', encoding: 'utf8' });
     } catch (e) {
+      debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.save', 'Setting file write failed.', {
+        filepath,
+        error: e,
+      });
       switch (e.code) {
         case 'ENOENT':
           error = MEMO_ERROR.NO_ENTRY;
@@ -979,11 +1272,15 @@ class MemoSetting {
    * @return {MEMO_ERROR} 設定のセットに成功したか
    */
   set (data) {
+    debugTrace('MemoSetting.set', { data });
     const result = this.validate(data);
     if (result === MEMO_ERROR.OK) {
       for (const [key, value] of Object.entries(data)) {
         this.settings[key] = value;
       }
+    }
+    if (result !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.set', 'Setting update failed.', { error: result, data });
     }
     return result;
   }
@@ -993,11 +1290,13 @@ class MemoSetting {
    * @return {Object} 設定
    */
   get () {
+    debugTrace('MemoSetting.get');
     return this.settings;
   }
 }
 
 function createWindow () {
+  debugTrace('createWindow');
   mainWindow = new BrowserWindow({
     width: USE_DEV_TOOL ? 500 : 250,
     // width: 500,
@@ -1016,9 +1315,14 @@ function createWindow () {
     mainWindow.openDevTools();
   }
   mainWindow.on('closed', () => {
+    debugTrace('mainWindow.closed');
     mainWindow = null;
   });
   mainWindow.on('close', (e) => {
+    debugTrace('mainWindow.close', {
+      eventType: e?.constructor?.name,
+      canPreventDefault: typeof e?.preventDefault === 'function',
+    });
     // TODO: 保存済みでなければ表示する
     /* 未保存面の面番号表示 */
     let message = '';
@@ -1047,8 +1351,9 @@ function createWindow () {
     }
   });
   mainWindow.on('ready-to-show', () => {
+    debugTrace('mainWindow.ready-to-show');
     setUISetting(memoManager.getUISetting());   // UIの設定を反映
-    console.log('ready-to-show');   // DEBUG
+    debugPrint(LOG_LEVEL.DEBUG, 'mainWindow.ready-to-show', 'Main window is ready.');
   });
   memoManager = new MemoManager(MAX_PAGENUM, new MemoSetting());
   memoManager.loadSetting(SETTING_FILENAME);
@@ -1059,6 +1364,7 @@ app.on('ready', createWindow);
 
 // mac os 対応
 app.on('window-all-closed', () => {
+  debugTrace('app.window-all-closed', { platform: process.platform });
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -1066,6 +1372,7 @@ app.on('window-all-closed', () => {
 
 // アプリがアクティブになった時の処理
 app.on('activate', () => {
+  debugTrace('app.activate');
   // メインウィンドウが閉じられている場合は新しく開く
   if (mainWindow === null) {
     createWindow();
@@ -1076,6 +1383,7 @@ app.on('activate', () => {
  * 全体設定画面を作成する
  */
 function createGlobalSettingWindow () {
+  debugTrace('createGlobalSettingWindow');
   const mainWindowPos = mainWindow.getPosition();
   globalSettingWindow = new BrowserWindow({
     x: mainWindowPos[0],
@@ -1096,6 +1404,7 @@ function createGlobalSettingWindow () {
     globalSettingWindow.openDevTools();
   }
   globalSettingWindow.on('closed', () => {
+    debugTrace('globalSettingWindow.closed');
     globalSettingWindow = null;
   });
 }
@@ -1104,6 +1413,7 @@ function createGlobalSettingWindow () {
  * 個別設定画面を作成する
  */
 function createLocalSettingWindow () {
+  debugTrace('createLocalSettingWindow');
   const mainWindowPos = mainWindow.getPosition();
   localSettingWindow = new BrowserWindow({
     x: mainWindowPos[0],
@@ -1124,6 +1434,7 @@ function createLocalSettingWindow () {
     localSettingWindow.openDevTools();
   }
   localSettingWindow.on('closed', () => {
+    debugTrace('localSettingWindow.closed');
     localSettingWindow = null;
   });
 }
@@ -1132,6 +1443,7 @@ function createLocalSettingWindow () {
  * 読込文字コード変更画面を作成する
  */
 function createReloadEncodingWindow () {
+  debugTrace('createReloadEncodingWindow');
   const mainWindowPos = mainWindow.getPosition();
   reloadEncodingWindow = new BrowserWindow({
     x: mainWindowPos[0],
@@ -1152,6 +1464,7 @@ function createReloadEncodingWindow () {
     reloadEncodingWindow.openDevTools();
   }
   reloadEncodingWindow.on('closed', () => {
+    debugTrace('reloadEncodingWindow.closed');
     reloadEncodingWindow = null;
   });
 }
@@ -1160,6 +1473,7 @@ function createReloadEncodingWindow () {
  * バージョン情報画面を作成する
  */
 function createVersionWindow () {
+  debugTrace('createVersionWindow');
   const mainWindowPos = mainWindow.getPosition();
   versionWindow = new BrowserWindow({
     x: mainWindowPos[0],
@@ -1180,6 +1494,7 @@ function createVersionWindow () {
     versionWindow.openDevTools();
   }
   versionWindow.on('closed', () => {
+    debugTrace('versionWindow.closed');
     versionWindow = null;
   });
 }
@@ -1189,6 +1504,7 @@ function createVersionWindow () {
  * @returns コンテキストメニュー
  */
 function createContextMenu () {
+  debugTrace('createContextMenu');
   const template = [
     {
       label: '切り取り',
@@ -1211,6 +1527,7 @@ function createContextMenu () {
     {
       label: '常に手前に表示',
       click: () => {
+        debugTrace('contextMenu.alwaysOnTop.click');
         /* 現在の設定を切り替える */
         const flag = memoManager.memoSetting.settings.topMost;
         memoManager.memoSetting.settings.topMost = !flag;
@@ -1276,6 +1593,7 @@ function createContextMenu () {
  * メインプロセスのロック状態を設定する
  */
 function setLockStatusMain (pageNum) {
+  debugTrace('setLockStatusMain', { pageNum });
   /* ロック状態を切り替え */
   memoManager.toggleLockStatus(pageNum);
 }
@@ -1285,6 +1603,7 @@ function setLockStatusMain (pageNum) {
  * ロック状態更新時、面切り替え時に呼び出す
  */
 function updateLockStatusMain () {
+  debugTrace('updateLockStatusMain', { pageNum: memoManager.pageNum });
   const lockList = memoManager.getLockStatus();
   /* コンテキストメニューをロック */
   mainWindowContextMenu.getMenuItemById('cut').enabled = !lockList[memoManager.pageNum];
@@ -1299,6 +1618,7 @@ function updateLockStatusMain () {
 
 // コンテキストメニュー
 ipcMain.handle('show-main-context-menu', (event) => {
+  debugTrace('ipc.show-main-context-menu', { senderId: event.sender.id });
   mainWindowContextMenu.popup(BrowserWindow.fromWebContents(event.sender));
 });
 
@@ -1312,13 +1632,25 @@ ipcMain.handle('show-main-context-menu', (event) => {
  * }
  */
 ipcMain.handle('file-save', (event, data) => {
+  debugTrace('ipc.file-save', {
+    senderId: event.sender.id,
+    pageNum: data?.pagenum,
+    filename: data?.filename,
+    textLength: data?.text?.length ?? null,
+  });
   let result = memoManager.save(data.pagenum, data.filename, data.text);  // デバッグ（上書き機能追加予定）
-  console.log(result);
+  debugPrint(LOG_LEVEL.DEBUG, 'ipc.file-save', 'Save result.', { result });
+  if (result.error !== MEMO_ERROR.OK) {
+    debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'Save request failed.', {
+      error: result.error,
+      pageNum: data.pagenum,
+      filename: data.filename,
+    });
+  }
   switch (result.error) {
     case MEMO_ERROR.OK:
       break;
     case MEMO_ERROR.NO_FILENAME:
-      console.log('NOFILE');
       dialog.showMessageBoxSync(mainWindow, {
         message: 'ファイル名を入力してください',
         type: 'warning',
@@ -1326,7 +1658,6 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.INV_FNAME:
-      console.log('INV_FNAME');
       dialog.showMessageBox(mainWindow, {
         message: 'ファイル名が不正です',
         type: 'warning',
@@ -1334,7 +1665,6 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.FILE_EXIST: {
-      console.log('FILE_EXIST');
       const options = {
         message: 'ファイルが存在します。上書きしますか？',
         type: 'warning',
@@ -1346,12 +1676,18 @@ ipcMain.handle('file-save', (event, data) => {
       const ret = dialog.showMessageBoxSync(mainWindow, options);
       if (ret === 0) { // OKなら上書き
         result = memoManager.save(data.pagenum, data.filename, data.text, { overwrite: true });
+        if (result.error !== MEMO_ERROR.OK) {
+          debugPrint(LOG_LEVEL.ERROR, 'ipc.file-save', 'Overwrite save failed.', {
+            error: result.error,
+            pageNum: data.pagenum,
+            filename: data.filename,
+          });
+        }
       }
       // TODO: ダイアログ表示中に保存先を消されたらどうする？
       break;
     }
     case MEMO_ERROR.NO_ENTRY:
-      console.log('NO_ENTRY');
       dialog.showMessageBox(mainWindow, {
         message: 'ファイル名に不正な文字または文字列が含まれています',
         title: DIALOG_TITLE,
@@ -1359,7 +1695,6 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.NO_DIR:
-      console.log('NO_DIR');
       dialog.showMessageBox(mainWindow, {
         message: '保存先フォルダが存在しません。再設定してください',
         type: 'warning',
@@ -1367,7 +1702,6 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.BUSY:
-      console.log('BUSY');
       dialog.showMessageBoxSync(mainWindow, {
         message: 'ファイルが開かれています。閉じてから再試行してください',
         title: DIALOG_TITLE,
@@ -1375,6 +1709,11 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     default:
+      debugPrint(LOG_LEVEL.ERROR, 'ipc.file-save', 'Unexpected save error.', {
+        error: result.error,
+        pageNum: data.pagenum,
+        filename: data.filename,
+      });
       dialog.showErrorBox('保存エラー', '想定しないエラーが発生しました');
       break;
   }
@@ -1390,6 +1729,11 @@ ipcMain.handle('file-save', (event, data) => {
  * }
  */
 ipcMain.handle('file-load', (event, data) => {
+  debugTrace('ipc.file-load', {
+    senderId: event.sender.id,
+    pageNum: data?.pagenum,
+    path: data?.path,
+  });
   const memoData = loadMemo(data);
   if (memoData != null && memoData.error === 0) {
     // メモデータを返す
@@ -1398,9 +1742,24 @@ ipcMain.handle('file-load', (event, data) => {
 });
 
 function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
+  debugTrace('loadMemo', {
+    pageNum: data?.pagenum,
+    path: data?.path,
+    ignoreFsize,
+    overwrite,
+  });
   let memoData = null;
   let ret = null;  // ダイアログの戻り値用
   memoData = memoManager.load(data.pagenum, data.path, { ignoreFsize, overwrite });
+  if (memoData.error !== MEMO_ERROR.OK) {
+    debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'Load request failed.', {
+      error: memoData.error,
+      pageNum: data.pagenum,
+      path: data.path,
+      ignoreFsize,
+      overwrite,
+    });
+  }
   switch (memoData.error) {
     case MEMO_ERROR.OK:
       /* 読込成功 */
@@ -1460,6 +1819,11 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
     case MEMO_ERROR.ERROR:
     default:
       /* その他エラー */
+      debugPrint(LOG_LEVEL.ERROR, 'loadMemo', 'Unexpected load error.', {
+        error: memoData.error,
+        pageNum: data.pagenum,
+        path: data.path,
+      });
       dialog.showMessageBoxSync(mainWindow, {
         message: '予期しない読み込みエラーが発生しました',
         type: 'error',
@@ -1474,6 +1838,7 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
  * 現在の全体設定の値を送る
  */
 ipcMain.handle('global-setting-get', (event) => {
+  debugTrace('ipc.global-setting-get', { senderId: event.sender.id });
   const settings = memoManager.getGlobalSetting();
   event.sender.send('global-setting-get-result', settings);
 });
@@ -1482,8 +1847,14 @@ ipcMain.handle('global-setting-get', (event) => {
  * 全体設定の設定を受信し、反映する
  */
 ipcMain.handle('global-setting-set', (event, data) => {
-  console.log(data);
+  debugTrace('ipc.global-setting-set', { senderId: event.sender.id, data });
   const ret = memoManager.setGlobalSetting(data);
+  if (ret !== MEMO_ERROR.OK) {
+    debugPrint(LOG_LEVEL.WARN, 'ipc.global-setting-set', 'Global setting request failed.', {
+      error: ret,
+      data,
+    });
+  }
   switch (ret) {
     case MEMO_ERROR.OK:
       /* UIの設定を更新 */
@@ -1509,6 +1880,10 @@ ipcMain.handle('global-setting-set', (event, data) => {
     case MEMO_ERROR.ERROR:
     default:
       /* その他エラー */
+      debugPrint(LOG_LEVEL.ERROR, 'ipc.global-setting-set', 'Unexpected global setting error.', {
+        error: ret,
+        data,
+      });
       dialog.showMessageBoxSync(globalSettingWindow, {
         message: `全体設定のセットに失敗しました。\nデータ構造が一致していない可能性があります (${ret})`,
         type: 'error',
@@ -1521,6 +1896,7 @@ ipcMain.handle('global-setting-set', (event, data) => {
  * 個別設定ウィンドウに現在の設定を渡す
  */
 ipcMain.handle('local-setting-get', (event) => {
+  debugTrace('ipc.local-setting-get', { senderId: event.sender.id });
   const settings = memoManager.getLocalSetting();
   event.sender.send('local-setting-get-result', settings);
 });
@@ -1529,8 +1905,14 @@ ipcMain.handle('local-setting-get', (event) => {
  * 個別設定を反映する
  */
 ipcMain.handle('local-setting-set', (event, data) => {
-  console.log(data);
+  debugTrace('ipc.local-setting-set', { senderId: event.sender.id, data });
   const err = memoManager.setLocalSetting(data);
+  if (err !== MEMO_ERROR.OK) {
+    debugPrint(LOG_LEVEL.ERROR, 'ipc.local-setting-set', 'Local setting request failed.', {
+      error: err,
+      data,
+    });
+  }
   switch (err) {
     case MEMO_ERROR.OK:
       /* 成功 */
@@ -1551,6 +1933,7 @@ ipcMain.handle('local-setting-set', (event, data) => {
  * 読込文字コード変更ウィンドウに現在の設定を渡す
  */
 ipcMain.handle('now-encoding-get', (event) => {
+  debugTrace('ipc.now-encoding-get', { senderId: event.sender.id });
   // 個別設定と同じ
   const settings = memoManager.getLocalSetting();
   event.sender.send('now-encoding-get-result', settings);
@@ -1560,8 +1943,14 @@ ipcMain.handle('now-encoding-get', (event) => {
  * 読込文字コードを変更する
  */
 ipcMain.handle('reload-encoding', (event, data) => {
+  debugTrace('ipc.reload-encoding', {
+    senderId: event.sender.id,
+    pageNum: data?.pagenum,
+    encoding: data?.encoding,
+  });
   const pageNum = data.pagenum;
   if (!memoManager.memoList[pageNum].isExternalFile) {
+    debugPrint(LOG_LEVEL.WARN, 'ipc.reload-encoding', 'Current memo is not an external file.', { pageNum });
     dialog.showMessageBoxSync(reloadEncodingWindow, {
       message: '外部読込ファイルではないため実行できません',
       type: 'info',
@@ -1571,6 +1960,14 @@ ipcMain.handle('reload-encoding', (event, data) => {
     const encoding = data.encoding;
     const filename = memoManager.memoList[pageNum].savepath;  // 初回読み込み時に設定したフルパス
     const memoData = memoManager.load(pageNum, filename, { ignoreFsize: true, overwrite: true, encoding });    // 一度読み込んでいるため、ファイルサイズ・上書き判定は無視
+    if (memoData.error !== MEMO_ERROR.OK) {
+      debugPrint(LOG_LEVEL.WARN, 'ipc.reload-encoding', 'Reload with specified encoding failed.', {
+        error: memoData.error,
+        pageNum,
+        filename,
+        encoding,
+      });
+    }
     switch (memoData.error) {
       case MEMO_ERROR.OK:
         /* 読込成功 */
@@ -1595,6 +1992,12 @@ ipcMain.handle('reload-encoding', (event, data) => {
       case MEMO_ERROR.ERROR:
       default:
         /* その他エラー */
+        debugPrint(LOG_LEVEL.ERROR, 'ipc.reload-encoding', 'Unexpected reload encoding error.', {
+          error: memoData.error,
+          pageNum,
+          filename,
+          encoding,
+        });
         dialog.showMessageBoxSync(reloadEncodingWindow, {
           message: `予期しない読み込みエラーが発生しました (${memoData.error})`,
           type: 'error',
@@ -1611,6 +2014,7 @@ ipcMain.handle('reload-encoding', (event, data) => {
  * 現在のページ番号をセットする
  */
 ipcMain.handle('set-pagenum', (event, pagenum) => {
+  debugTrace('ipc.set-pagenum', { senderId: event.sender.id, pagenum });
   memoManager.setPageNum(pagenum);
 });
 
@@ -1618,11 +2022,13 @@ ipcMain.handle('set-pagenum', (event, pagenum) => {
  * フォントサイズをセットする
  */
 ipcMain.handle('set-fontsize', (event, fontsize) => {
+  debugTrace('ipc.set-fontsize', { senderId: event.sender.id, fontsize });
   memoManager.setFontSize(fontsize);
 });
 
 // 未保存フラグを立てる
 ipcMain.handle('file-unsaved', (event, pagenum) => {
+  debugTrace('ipc.file-unsaved', { senderId: event.sender.id, pagenum });
   memoManager.setUnsaved(pagenum);
 });
 
@@ -1630,6 +2036,7 @@ ipcMain.handle('file-unsaved', (event, pagenum) => {
  * メインプロセスのロック状態を設定する
  */
 ipcMain.handle('set-lock-status-main', (event, pagenum) => {
+  debugTrace('ipc.set-lock-status-main', { senderId: event.sender.id, pagenum });
   setLockStatusMain(pagenum);
 });
 
@@ -1637,6 +2044,7 @@ ipcMain.handle('set-lock-status-main', (event, pagenum) => {
  * メインプロセスのロック状態を更新する
  */
 ipcMain.handle('update-lock-status-main', (event) => {
+  debugTrace('ipc.update-lock-status-main', { senderId: event.sender.id });
   updateLockStatusMain();
 });
 
@@ -1645,6 +2053,7 @@ ipcMain.handle('update-lock-status-main', (event) => {
  * コンテキストメニューから呼ぶことを想定
  */
 function setLockStatus () {
+  debugTrace('setLockStatus', { pageNum: memoManager.pageNum });
   /* メインプロセスのロック状態を設定 */
   setLockStatusMain(memoManager.pageNum);
   /* メインプロセスのロック状態を更新 */
@@ -1659,6 +2068,7 @@ function setLockStatus () {
  * メモをクリアし、情報を送信する
  */
 function clearMemo () {
+  debugTrace('clearMemo', { pageNum: memoManager.pageNum });
   const data = memoManager.clearMemo(memoManager.pageNum);
   mainWindow.webContents.send('clear-memo', data);
 }
@@ -1668,6 +2078,7 @@ function clearMemo () {
  * @param {Object} settings
  */
 function setUISetting (settings) {
+  debugTrace('setUISetting', { settings });
   mainWindow.webContents.send('set-settings', settings);
   mainWindow.setAlwaysOnTop(settings.topMost); // 常に手前に表示
 }
