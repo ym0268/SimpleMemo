@@ -538,10 +538,6 @@ class Memo {
       }
     }
     if (err === MEMO_ERROR.OK) {
-      // 読込成功
-      this.clear();
-      this.setExternalFile(filepath);
-
       // 文字コード変換
       if (encoding !== null) {
         // 文字コード指定の場合、文字コード名チェック
@@ -560,6 +556,13 @@ class Memo {
         from = (encoding === null) ? from : encoding;              // encodingがnullでなければその文字コードで読み込み
         buf = this.convertEncoding(buf, { target: this.JS_ENCODE, from, update: true });
       }
+    }
+    if (err === MEMO_ERROR.OK) {
+      // 読込成功
+      const tmpEncoding = this.encoding;  // this.clear()でエンコードが初期化されるため、再設定のために保持する
+      this.clear();
+      this.setExternalFile(filepath);
+      this.setEncoding(tmpEncoding);    // 読込後の文字コードを保持する
     }
 
     const data = {
