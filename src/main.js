@@ -50,6 +50,14 @@ const LOG_LEVEL_NAME = Object.freeze({
   3: 'DEBUG',
   4: 'TRACE',
 });
+const LOG_LEVEL_ANSI_COLOR = Object.freeze({
+  [LOG_LEVEL.ERROR]: '\x1b[31m',  // Red
+  [LOG_LEVEL.WARN]: '\x1b[33m',   // Yellow
+  [LOG_LEVEL.INFO]: '\x1b[32m',   // Green
+  [LOG_LEVEL.DEBUG]: '\x1b[36m',  // Cyan
+  [LOG_LEVEL.TRACE]: '\x1b[90m',  // Bright black
+});
+const ANSI_COLOR_RESET = '\x1b[0m';
 const DEFAULT_LOG_LEVEL_NAME = app.isPackaged ? 'ERROR' : 'DEBUG';
 const requestedLogLevelName = (process.env.SIMPLEMEMO_LOG_LEVEL || DEFAULT_LOG_LEVEL_NAME).toUpperCase();
 const CURRENT_LOG_LEVEL = Object.prototype.hasOwnProperty.call(LOG_LEVEL, requestedLogLevelName)
@@ -108,7 +116,15 @@ function debugPrint (level, functionName, message = '', details = null) {
     }
   }
 
-  const output = `[${new Date().toISOString()}] [${LOG_LEVEL_NAME[level] || 'UNKNOWN'}] [${functionName}] ${message}${detailsText}`;
+  const levelName = LOG_LEVEL_NAME[level] || 'UNKNOWN';
+  const levelLabel = `[${levelName}]`;
+  /* ログファイル書き出しの際はANSI制御文字が混ざるため、環境変数 SIMPLEMEMO_LOG_COLOR='OFF' とすること */
+  const colorEnabled = (process.env.SIMPLEMEMO_LOG_COLOR || 'ON').toUpperCase() !== 'OFF';
+  const levelColor = LOG_LEVEL_ANSI_COLOR[level];
+  const formattedLevelLabel = colorEnabled && levelColor
+    ? `${levelColor}${levelLabel}${ANSI_COLOR_RESET}`
+    : levelLabel;
+  const output = `[${new Date().toISOString()}] ${formattedLevelLabel} [${functionName}] ${message}${detailsText}`;
   if (level === LOG_LEVEL.ERROR) {
     console.error(output);
   } else if (level === LOG_LEVEL.WARN) {
