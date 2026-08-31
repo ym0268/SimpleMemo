@@ -119,8 +119,7 @@ function debugPrint (level, functionName, message = '', details = null) {
 }
 
 /**
- * 関数入口のTRACEログを出力する。
- * ログ基盤自身は再帰を避けるためTRACE対象外とする。
+ * 関数トレースログ用デバッグ出力
  * @param {String} functionName 関数名
  * @param {*} args 引数情報
  */
@@ -232,6 +231,11 @@ class EncodingConverter {
     let textarr = text;
     if (typeof (text) === 'string') {
       textarr = encoding.stringToCode(text);
+    } else {
+      debugPrint(LOG_LEVEL.ERROR, 'EncodingConverter.addBOM', 'BOM addition received non-string input.', {
+        textType: typeof text,
+        textLength: text?.length ?? null,
+      });
     }
 
     const isBOM = this.checkBOM(textarr);
@@ -243,6 +247,10 @@ class EncodingConverter {
         textarr = new Uint8Array([...this.bom_utf16be, ...textarr]);
       } else if (enc === 'UTF16LE') {
         textarr = new Uint8Array([...this.bom_utf16le, ...textarr]);
+      } else {
+        debugPrint(LOG_LEVEL.ERROR, 'EncodingConverter.addBOM', 'BOM cannot be added for unsupported encoding.', {
+          encoding: enc,
+        });
       }
     }
     const newtext = encoding.codeToString(textarr);
@@ -263,6 +271,11 @@ class EncodingConverter {
     let textarr = text;
     if (typeof (text) === 'string') {
       textarr = encoding.stringToCode(text);
+    } else {
+      debugPrint(LOG_LEVEL.ERROR, 'EncodingConverter.removeBOM', 'BOM removal received non-string input.', {
+        textType: typeof text,
+        textLength: text?.length ?? null,
+      });
     }
     const enc = this.checkBOM(textarr);  // BOMがついていれば削除
     if (enc === 'UTF8') {
@@ -331,6 +344,12 @@ class EncodingConverter {
       ret = this.addBOM(ret, params.to);
     } else if (params.bom === false) {
       ret = this.removeBOM(ret);
+    } else if (params.bom === null) {
+      // 何もしない
+    } else {
+      const error = new Error('[EncodingConverter.convert()] params[\'bom\'] must be true, false, or null.');
+      debugPrint(LOG_LEVEL.ERROR, 'EncodingConverter.convert', 'Invalid BOM parameter.', { error, params });
+      throw error;
     }
     return ret;
   }
@@ -411,6 +430,8 @@ class Memo {
       enc = 'UTF16LE_BOM';
     } else if ((enc === 'UTF16BE') && ret.bom === true) {
       enc = 'UTF16BE_BOM';
+    } else {
+      // BOMなし
     }
     debugPrint(LOG_LEVEL.DEBUG, 'Memo.detectEncoding', 'Detected encoding.', { encoding: enc });
     return enc;
@@ -559,6 +580,7 @@ class Memo {
     }
     if (err === MEMO_ERROR.OK) {
       // 読込成功
+      debugPrint(LOG_LEVEL.DEBUG, 'Memo.load', 'File loaded successfully.', { filepath, encoding: this.encoding });
       const tmpEncoding = this.encoding;  // this.clear()でエンコードが初期化されるため、再設定のために保持する
       this.clear();
       this.setExternalFile(filepath);
@@ -608,7 +630,10 @@ class Memo {
   addExtension (filename) {
     debugTrace('Memo.addExtension', { filename });
     if (!this._isExternalFile) {
+      debugPrint(LOG_LEVEL.DEBUG, 'Memo.addExtension', 'Add extension.', { filename });
       filename = filename + '.txt';  // アプリ内作成ファイルの場合、拡張子を付加
+    } else {
+      debugPrint(LOG_LEVEL.DEBUG, 'Memo.addExtension', 'No extension added.', { filename });
     }
     return filename;
   }
@@ -627,6 +652,8 @@ class Memo {
         error: err,
         filename,
       });
+    } else {
+      debugPrint(LOG_LEVEL.DEBUG, 'Memo.checkFilename', 'Filename is valid.', { filename });
     }
     return err;
   }
@@ -690,20 +717,24 @@ class Memo {
       let savepath = path.join(this.savedirpath, filenameWithExt);
       if( (this._isExternalFile === true) && (savepath !== this.savepath) ) {
         // 外部読込後にファイル名を変更した場合
+        // 外部ファイルを上書きせずに別名で保存しようとしている場合は、外部ファイルではなく新規ファイルとして保存する
         this._isExternalFile = false;  // 新規保存扱いにする
         filenameWithExt = this.addExtension(filename); // 拡張子付加
         // savepath = path.join(this.savedirpath, filenameWithExt);
         savepath = path.join(this.defaultSavePath, filenameWithExt); // 保存先はデフォルト保存先に変更
+        debugPrint(LOG_LEVEL.DEBUG, 'Memo.save', 'Save as new file. Not overwrite external file.', { savepath: savepath, fullpath: this.savepath });
       }
 
       // 外部読み込みファイル、上書き可または保存先が前回と一致した場合は上書きモード
       if ((this._isExternalFile === true) || (overwrite === true) || (savepath === this.savepath)) {
+        debugPrint(LOG_LEVEL.DEBUG, 'Memo.save', 'Overwrite mode.', { savepath });
         wFlag = 'w';
       }
 
       // 外部ファイルではなく、新規保存だと思われる場合はデフォルトエンコーディングをセット
       // もともと外部読込ファイルだった場合は変更しない（外部読込後にファイル名を変更した場合）
       if ((tmpIsExternalFile === false) && (savepath !== this.savepath)) {
+        debugPrint(LOG_LEVEL.DEBUG, 'Memo.save', 'New file save. Set default encoding.', { defaultEncoding: this.defaultEncoding });
         this.encoding = this.defaultEncoding;
       }
 
@@ -714,6 +745,7 @@ class Memo {
       try {
         fs.writeFileSync(savepath, text, { flag: wFlag, encoding: 'binary' });
         if (savepath !== this.savepath) {
+          debugPrint(LOG_LEVEL.DEBUG, 'Memo.save', 'New file saved.', { savepath });
           this.setNewFile();  // 新規保存
         }
         this.savepath = savepath;   // 保存先を保存
@@ -759,7 +791,7 @@ class Memo {
   clear () {
     debugTrace('Memo.clear');
     this.savedirpath = this.defaultSavePath;
-    this.encoding = this.defaultEncoding;
+    this.encoding = this.defaultEncoding;  // TODO: 2026/8/31 削除検討。UI側クリア時なら良いが、外部ファイル読込時にクリアするのは良くない。
     this._isExternalFile = false;
     this.saveCount = 0;
     this.savepath = null;
@@ -775,6 +807,7 @@ class Memo {
     this.defaultSavePath = newSavePath;
     // 外部読み込みファイルでなければ保存先を変更する (一度保存済みのファイルも更新されるのは仕様)
     if (!this._isExternalFile) {
+      debugPrint(LOG_LEVEL.DEBUG, 'Memo.setDefaultSavePath', 'Internal file.');
       this.savedirpath = newSavePath;
     }
   }
@@ -811,8 +844,12 @@ class Memo {
       this.defaultEncoding = newEncoding;
       // 外部ファイルではなく、１度も保存していなければデフォルトエンコーディングを設定
       if ((this._isExternalFile === false) && (this.saveCount === 0)) {
+        debugPrint(LOG_LEVEL.DEBUG, 'Memo.setDefaultEncoding', 'Internal file and not saved yet. Set default encoding.', { defaultEncoding: this.defaultEncoding });
         this.encoding = this.defaultEncoding;
       }
+    } else {
+      // エンコード名不正
+      debugPrint(LOG_LEVEL.ERROR, 'Memo.setDefaultEncoding', 'Invalid encoding name.', { error: err, newEncoding });
     }
     return err;
   }
@@ -827,6 +864,8 @@ class Memo {
     const err = this.checkEncodingName(newEncoding);
     if (err === MEMO_ERROR.OK) {
       this.encoding = newEncoding;
+    } else {
+      debugPrint(LOG_LEVEL.ERROR, 'Memo.setEncoding', 'Invalid encoding name.', { error: err, newEncoding });
     }
     return err;
   }
@@ -892,7 +931,7 @@ class MemoManager {
           // すでにオープン済み
           err = MEMO_ERROR.ALREDYOPEN;
           result = { error: err };
-          debugPrint(LOG_LEVEL.WARN, 'MemoManager.load', 'File is already open on another page.', {
+          debugPrint(LOG_LEVEL.WARN, 'MemoManager.load', 'Already opened.', {
             error: err,
             requestedPage: idx,
             openedPage: i,
@@ -1193,10 +1232,16 @@ class MemoSetting {
         /* 保存先確認エラー */
         /* 保存先が誤っていてもここでは何もしない（メモ保存時に判定する） */
         /* error = MEMO_ERROR.NO_DIR; */
+        debugPrint(LOG_LEVEL.WARN, 'MemoSetting.validate', 'Save directory does not exist. Validation continues.', {
+          savepath: data.savepath,
+        });
       } else if (!Number.isInteger(fontsize) || (fontsize <= 0)) {
         /* フォントサイズ確認エラー */
         error = MEMO_ERROR.INV_FONTSIZE;
         debugPrint(LOG_LEVEL.WARN, 'MemoSetting.validate', 'Invalid font size.', { error, fontsize });
+      } else {
+        // 検証OK
+        debugPrint(LOG_LEVEL.DEBUG, 'MemoSetting.validate', 'Setting validation OK.');
       }
     }
     return error;
@@ -1214,11 +1259,15 @@ class MemoSetting {
 
     try {
       buf = fs.readFileSync(filepath, { encoding: 'utf8' });
-      /* バージョンチェック(未実装) */
+      /* TODO: バージョンチェック(未実装) */
       if (error === MEMO_ERROR.OK) {
         /* 値のセット */
+        debugPrint(LOG_LEVEL.DEBUG, 'MemoSetting.load', 'Setting file read successfully.', { filepath });
         const settings = JSON.parse(buf);
         error = this.set(settings);
+        if(error !== MEMO_ERROR.OK) {
+          debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.load', 'Setting validation failed.', { error, filepath });
+        }
       }
     } catch (e) {
       debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.load', 'Setting file load or parse failed.', {
@@ -1330,6 +1379,7 @@ function createWindow () {
     /* 未保存面の面番号表示 */
     let message = '';
     const unsavedList = memoManager.getUnsavedList();
+    debugPrint(LOG_LEVEL.DEBUG, 'mainWindow.close', 'Unsaved page list.', { unsavedList });
     if (unsavedList.length > 0) {
       for (let i = 0; i < unsavedList.length; i++) {
         message = message + `${parseInt(unsavedList[i]) + 1}面 `;
@@ -1347,9 +1397,11 @@ function createWindow () {
       noLink: true,
     });
     if (ret === 1) {
+      debugPrint(LOG_LEVEL.DEBUG, 'mainWindow.close', 'User cancelled window close.');
       e.preventDefault(); // キャンセルなら終了しない
     } else {
       // 設定を保存して終了
+      debugPrint(LOG_LEVEL.DEBUG, 'mainWindow.close', 'Saving settings and closing window.');
       memoManager.saveSetting(SETTING_FILENAME);
     }
   });
@@ -1378,6 +1430,7 @@ app.on('activate', () => {
   debugTrace('app.activate');
   // メインウィンドウが閉じられている場合は新しく開く
   if (mainWindow === null) {
+    debugPrint(LOG_LEVEL.INFO, 'app.activate', 'Main window is null. Creating new window.');
     createWindow();
   }
 });
@@ -1652,8 +1705,10 @@ ipcMain.handle('file-save', (event, data) => {
   }
   switch (result.error) {
     case MEMO_ERROR.OK:
+      debugPrint(LOG_LEVEL.DEBUG, 'ipc.file-save', 'Success.');
       break;
     case MEMO_ERROR.NO_FILENAME:
+      debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'No filename provided.');
       dialog.showMessageBoxSync(mainWindow, {
         message: 'ファイル名を入力してください',
         type: 'warning',
@@ -1661,6 +1716,7 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.INV_FNAME:
+      debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'Invalid filename.');
       dialog.showMessageBox(mainWindow, {
         message: 'ファイル名が不正です',
         type: 'warning',
@@ -1668,6 +1724,7 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.FILE_EXIST: {
+      debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'File already exists.');
       const options = {
         message: 'ファイルが存在します。上書きしますか？',
         type: 'warning',
@@ -1678,6 +1735,7 @@ ipcMain.handle('file-save', (event, data) => {
       };
       const ret = dialog.showMessageBoxSync(mainWindow, options);
       if (ret === 0) { // OKなら上書き
+        debugPrint(LOG_LEVEL.DEBUG, 'ipc.file-save', 'User confirmed overwrite.');
         result = memoManager.save(data.pagenum, data.filename, data.text, { overwrite: true });
         if (result.error !== MEMO_ERROR.OK) {
           debugPrint(LOG_LEVEL.ERROR, 'ipc.file-save', 'Overwrite save failed.', {
@@ -1686,11 +1744,14 @@ ipcMain.handle('file-save', (event, data) => {
             filename: data.filename,
           });
         }
+      } else {
+        debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'Overwrite save was cancelled.');
       }
       // TODO: ダイアログ表示中に保存先を消されたらどうする？
       break;
     }
     case MEMO_ERROR.NO_ENTRY:
+      debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'Invalid filename or path.', { filename: data.filename });
       dialog.showMessageBox(mainWindow, {
         message: 'ファイル名に不正な文字または文字列が含まれています',
         title: DIALOG_TITLE,
@@ -1698,6 +1759,7 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.NO_DIR:
+      debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'Save directory does not exist.', { filename: data.filename });
       dialog.showMessageBox(mainWindow, {
         message: '保存先フォルダが存在しません。再設定してください',
         type: 'warning',
@@ -1705,6 +1767,7 @@ ipcMain.handle('file-save', (event, data) => {
       });
       break;
     case MEMO_ERROR.BUSY:
+      debugPrint(LOG_LEVEL.WARN, 'ipc.file-save', 'File is busy.', { filename: data.filename });
       dialog.showMessageBoxSync(mainWindow, {
         message: 'ファイルが開かれています。閉じてから再試行してください',
         title: DIALOG_TITLE,
@@ -1741,6 +1804,13 @@ ipcMain.handle('file-load', (event, data) => {
   if (memoData != null && memoData.error === 0) {
     // メモデータを返す
     event.sender.send('file-load-result', memoData);
+  } else {
+    debugPrint(LOG_LEVEL.WARN, 'ipc.file-load', 'File load result was not sent.', {
+      error: memoData?.error ?? null,
+      pageNum: data?.pagenum,
+      path: data?.path,
+      resultIsNull: memoData == null,
+    });
   }
 });
 
@@ -1766,9 +1836,11 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
   switch (memoData.error) {
     case MEMO_ERROR.OK:
       /* 読込成功 */
+      debugPrint(LOG_LEVEL.DEBUG, 'loadMemo', 'Load successful.');
       break;
     case MEMO_ERROR.ALREDYOPEN:
       /* 既に開いています */
+      debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'Already open.' );
       dialog.showMessageBoxSync(mainWindow, {
         message: 'このメモはすでに開いています',
         type: 'info',
@@ -1777,6 +1849,7 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
       break;
     case MEMO_ERROR.LEAVEMEMO:
       /* メモが残っています。開きますか？ */
+      debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'Leave memo.' );
       ret = dialog.showMessageBoxSync(mainWindow, {
         message: 'メモが残っています。開きますか？',
         type: 'info',
@@ -1787,10 +1860,17 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
       if (ret === 0) {  // OK
         clearMemo();  // 未保存フラグ'*'を消すために実行
         memoData = loadMemo(data, { ignoreFsize, overwrite: true });
+      } else {
+        debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'Loading was cancelled because the memo has unsaved content.', {
+          dialogResult: ret,
+          pageNum: data.pagenum,
+          path: data.path,
+        });
       }
       break;
     case MEMO_ERROR.NO_ENTRY:
       /* ファイルが存在しない */
+      debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'File not found.');
       dialog.showMessageBoxSync(mainWindow, {
         message: 'ファイルが存在しません',
         type: 'warning',
@@ -1799,6 +1879,7 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
       break;
     case MEMO_ERROR.LARGEFILE:
       /* ファイルサイズが巨大です。アプリが不安定になる場合があります */
+      debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'File size is too large.');
       ret = dialog.showMessageBoxSync(mainWindow, {
         // TODO: ファイルサイズをダイアログに表示する？
         message: 'ファイルサイズが巨大です。アプリが不安定になる場合があります\n開きますか？',
@@ -1808,11 +1889,19 @@ function loadMemo (data, { ignoreFsize = false, overwrite = false } = {}) {
         noLink: true,
       });
       if (ret === 0) {  // OK
+        debugPrint(LOG_LEVEL.INFO, 'loadMemo', 'Forced loading of a large file.');
         memoData = loadMemo(data, { ignoreFsize: true, overwrite });
+      } else {
+        debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'Loading a large file was cancelled.', {
+          dialogResult: ret,
+          pageNum: data.pagenum,
+          path: data.path,
+        });
       }
       break;
     case MEMO_ERROR.BUSY:
       /* ファイルは使用中です。ファイルを閉じてから再試行してください */
+      debugPrint(LOG_LEVEL.WARN, 'loadMemo', 'File is in use.' );
       dialog.showMessageBoxSync(mainWindow, {
         message: 'ファイルは使用中です。ファイルを閉じてから再試行してください',
         type: 'warning',
@@ -1860,6 +1949,7 @@ ipcMain.handle('global-setting-set', (event, data) => {
   }
   switch (ret) {
     case MEMO_ERROR.OK:
+      debugPrint(LOG_LEVEL.DEBUG, 'ipc.global-setting-set', 'Global setting updated successfully.');
       /* UIの設定を更新 */
       setUISetting(memoManager.getUISetting());
       /* 設定完了 */
@@ -1867,6 +1957,7 @@ ipcMain.handle('global-setting-set', (event, data) => {
       break;
     case MEMO_ERROR.NO_DIR:
       /* 保存先が存在しない */
+      debugPrint(LOG_LEVEL.WARN, 'ipc.global-setting-set', 'Save directory does not exist.');
       dialog.showMessageBoxSync(globalSettingWindow, {
         message: '保存先が存在しません',
         type: 'warning',
@@ -1874,6 +1965,8 @@ ipcMain.handle('global-setting-set', (event, data) => {
       });
       break;
     case MEMO_ERROR.INV_FONTSIZE:
+      /* フォントサイズが不正 */
+      debugPrint(LOG_LEVEL.WARN, 'ipc.global-setting-set', 'Invalid font size.');
       dialog.showMessageBoxSync(globalSettingWindow, {
         message: 'フォントサイズが不正です。\n1以上の値を入力してください。',
         type: 'warning',
@@ -1919,11 +2012,16 @@ ipcMain.handle('local-setting-set', (event, data) => {
   switch (err) {
     case MEMO_ERROR.OK:
       /* 成功 */
+      debugPrint(LOG_LEVEL.DEBUG, 'ipc.local-setting-set', 'Local setting updated successfully.');
       localSettingWindow.close();
       break;
     case MEMO_ERROR.ERROR:
     default:
       /* エラー */
+      debugPrint(LOG_LEVEL.ERROR, 'ipc.local-setting-set', 'Unexpected local setting error.', {
+        error: err,
+        data,
+      });
       dialog.showMessageBoxSync(localSettingWindow, {
         message: `個別設定のセットに失敗しました。バグです。  (${err})`,
         type: 'error',
@@ -1974,10 +2072,12 @@ ipcMain.handle('reload-encoding', (event, data) => {
     switch (memoData.error) {
       case MEMO_ERROR.OK:
         /* 読込成功 */
+        debugPrint(LOG_LEVEL.DEBUG, 'ipc.reload-encoding', 'Success.');
         reloadEncodingWindow.close();
         break;
       case MEMO_ERROR.NO_ENTRY:
         /* ファイルが存在しない */
+        debugPrint(LOG_LEVEL.WARN, 'ipc.reload-encoding', 'File not found.');
         dialog.showMessageBoxSync(reloadEncodingWindow, {
           message: 'ファイルが存在しません。\n移動、名前変更、削除された可能性があります。',
           type: 'warning',
@@ -1986,6 +2086,7 @@ ipcMain.handle('reload-encoding', (event, data) => {
         break;
       case MEMO_ERROR.BUSY:
         /* ファイルは使用中です。ファイルを閉じてから再試行してください */
+        debugPrint(LOG_LEVEL.WARN, 'ipc.reload-encoding', 'File is in use.' );
         dialog.showMessageBoxSync(reloadEncodingWindow, {
           message: 'ファイルは使用中です。ファイルを閉じてから再試行してください',
           type: 'warning',
