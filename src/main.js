@@ -1,7 +1,8 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, session } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const fs = require('fs');
 const encoding = require('encoding-japanese');
 
@@ -19,11 +20,20 @@ let mainWindowContextMenu = null;
 const MAX_PAGENUM = 3;
 const MAIN_WINDOW = path.join(__dirname, 'renderer/index.html');
 const MAIN_SETTING_WINDOW = path.join(__dirname, 'renderer/main_setting.html');       // 全体設定
+const MAIN_SETTING_URL = pathToFileURL(MAIN_SETTING_WINDOW).toString();
 const LOCAL_SETTING_WINDOW = path.join(__dirname, 'renderer/local_setting.html');      // 個別設定
 const RELOAD_ENCODING_WINDOW = path.join(__dirname, 'renderer/reload_encoding.html');   // 読込文字コード変更
 const VERSION_WINDOW = path.join(__dirname, 'renderer/version_window.html');     // バージョン情報
 const FILE_WARNING_SIZE = 1 * 1024 * 1024;  // 1MB
 const DIALOG_TITLE = 'SimpleMemo';
+const LOCAL_FONT_QUERY_SCRIPT = `
+  (() => {
+    if (typeof window.queryLocalFonts !== 'function') {
+      throw new Error('Local Font Access API is not available.');
+    }
+    return window.queryLocalFonts().then((fonts) => fonts.map((font) => font.family));
+  })()
+`;
 
 const rootDirectory = PORTABLE_BUILD ? process.env.PORTABLE_EXECUTABLE_DIR : './';
 const SETTING_FILENAME = path.join(rootDirectory, 'settings.json');              // 設定ファイル
@@ -1437,7 +1447,44 @@ function createWindow () {
   mainWindowContextMenu = createContextMenu();
 }
 
-app.on('ready', createWindow);
+/**
+ * 全体設定画面のWebContentsかを判定する
+ * @param {Electron.WebContents|null} webContents 要求元
+ * @returns {Boolean} 全体設定画面の場合はtrue
+ */
+function isGlobalSettingWebContents (webContents) {
+  return globalSettingWindow !== null &&
+    !globalSettingWindow.isDestroyed() &&
+    webContents === globalSettingWindow.webContents &&
+    webContents.getURL() === MAIN_SETTING_URL;
+}
+
+/**
+ * 全体設定画面からのローカルフォント取得要求かを判定する
+ * @param {Electron.WebContents|null} webContents 要求元
+ * @param {String} permission 権限名
+ * @returns {Boolean} 許可する場合はtrue
+ */
+function isLocalFontPermissionAllowed (webContents, permission) {
+  return permission === 'local-fonts' && isGlobalSettingWebContents(webContents);
+}
+
+/**
+ * Chromiumのローカルフォント取得権限を設定する
+ */
+function setPermissionHandlers () {
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    return isLocalFontPermissionAllowed(webContents, permission);
+  });
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(isLocalFontPermissionAllowed(webContents, permission));
+  });
+}
+
+app.on('ready', () => {
+  setPermissionHandlers();
+  createWindow();
+});
 
 // mac os 対応
 app.on('window-all-closed', () => {
@@ -1466,7 +1513,7 @@ function createGlobalSettingWindow () {
   globalSettingWindow = new BrowserWindow({
     x: mainWindowPos[0],
     y: mainWindowPos[1],
-    width: USE_DEV_TOOL ? 750 : 550,
+    width: USE_DEV_TOOL ? 800 : 600,
     height: 350,
     parent: mainWindow,
     modal: true,
@@ -1967,6 +2014,49 @@ ipcMain.handle('global-setting-get', (event) => {
   debugTrace('ipc.global-setting-get', { senderId: event.sender.id });
   const settings = memoManager.getGlobalSetting();
   event.sender.send('global-setting-get-result', settings);
+});
+
+/**
+ * OSにインストールされているフォントの一覧を取得する
+ */
+ipcMain.handle('system-fonts-get', async (event) => {
+  debugTrace('ipc.system-fonts-get', { senderId: event.sender.id });
+  if (!isGlobalSettingWebContents(event.sender)) {
+    debugPrint(LOG_LEVEL.WARN, 'ipc.system-fonts-get', 'Rejected request from an unexpected window.', {
+      senderId: event.sender.id,
+      senderUrl: event.sender.getURL(),
+    });
+    return {
+      fonts: [],
+      error: { name: 'NotAllowedError', message: 'The request was not allowed.' },
+    };
+  }
+
+  try {
+    /*
+     * 追加パッケージやOS別のフォント列挙処理は使用せず、Electronに内蔵された
+     * ChromiumのLocal Font Access API（queryLocalFonts）でフォント選択を実現している。
+     * queryLocalFonts()は通常、クリックなどのユーザー操作中に呼び出す必要がある。
+     * 設定画面を開いたときに自動取得するため、Mainプロセスから固定スクリプト
+     * LOCAL_FONT_QUERY_SCRIPTを実行し、第2引数のtrueでユーザー操作扱いにする。
+     * スクリプト内ではFontDataをそのまま返さず、IPCで扱えるfamily名の文字列配列へ
+     * 変換してからRendererプロセスへ返している。
+     */
+    const fonts = await event.sender.executeJavaScript(LOCAL_FONT_QUERY_SCRIPT, true);
+    debugPrint(LOG_LEVEL.DEBUG, 'ipc.system-fonts-get', 'System fonts loaded.', {
+      fontFaceCount: fonts.length,
+    });
+    return { fonts, error: null };
+  } catch (error) {
+    debugPrint(LOG_LEVEL.WARN, 'ipc.system-fonts-get', 'Failed to load system fonts.', { error });
+    return {
+      fonts: [],
+      error: {
+        name: error.name || 'Error',
+        message: error.message || 'Failed to load system fonts.',
+      },
+    };
+  }
 });
 
 /**
