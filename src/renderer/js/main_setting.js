@@ -19,6 +19,7 @@ function setSetting () {
   settings.encoding = document.getElementById('encoding_selector').value;
   settings.autoEncoding = document.getElementById('autoencoding_checkbox').checked;
   settings.topMost = document.getElementById('topmost_checkbox').checked;
+  settings.showCharacterCount = document.getElementById('character_count_checkbox').checked;
 
   /* 高度な設定 */
   // TODO
@@ -56,6 +57,7 @@ window.api.on('global-setting-get-result', (event, result) => {
   document.getElementById('encoding_selector').value = settings.encoding;
   document.getElementById('autoencoding_checkbox').checked = settings.autoEncoding;
   document.getElementById('topmost_checkbox').checked = settings.topMost;
+  document.getElementById('character_count_checkbox').checked = settings.showCharacterCount;
 
   /* 高度な設定 */
   // 未実装

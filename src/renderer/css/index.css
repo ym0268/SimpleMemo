@@ -10,6 +10,33 @@ textarea {
     font-family: inherit;
     overflow-anchor: none;
 }
+
+body.character-count-enabled textarea {
+    bottom: 29px;
+}
+
+#character_count_statusbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 24px;
+    box-sizing: border-box;
+    padding: 3px 8px;
+    border-top: 1px solid #c8c8c8;
+    background-color: #f4f4f4;
+    color: #333;
+    font-size: 12px;
+    line-height: 17px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#character_count_statusbar.is-hidden {
+    display: none;
+}
+
 input {
     position: fixed;
     resize: none;

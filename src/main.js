@@ -1087,6 +1087,7 @@ class MemoManager {
       fontsize: this.memoSetting.settings.fontsize,
       font: this.memoSetting.settings.font,
       topMost: this.memoSetting.settings.topMost,
+      showCharacterCount: this.memoSetting.settings.showCharacterCount,
     };
     return uiSettings;
   }
@@ -1180,6 +1181,7 @@ class MemoSetting {
       fontsize: 16,
       font: 'Yu Gothic UI',
       topMost: true,
+      showCharacterCount: false,
       encoding: 'UTF8',
       autoEncoding: true,
       fileSizeWarningTh: 1 * 1024 * 1024,
@@ -1280,6 +1282,10 @@ class MemoSetting {
         /* 値のセット */
         debugPrint(LOG_LEVEL.DEBUG, 'MemoSetting.load', 'Setting file read successfully.', { filepath });
         const settings = JSON.parse(buf);
+        /* v1.1.0 showCharacterCountを追加。設定に無い場合はvalidate(this.set()の中で呼び出し)を通すためにここで追加する。 */
+        if (!Object.hasOwn(settings, 'showCharacterCount')) {
+          settings.showCharacterCount = false;
+        }
         error = this.set(settings);
         if(error !== MEMO_ERROR.OK) {
           debugPrint(LOG_LEVEL.ERROR, 'MemoSetting.load', 'Setting validation failed.', { error, filepath });
@@ -1608,6 +1614,18 @@ function createContextMenu () {
       id: 'topmost',
       type: 'checkbox',
       checked: memoManager.memoSetting.settings.topMost,
+    },
+    {
+      label: '文字数を表示',
+      click: () => {
+        debugTrace('contextMenu.showCharacterCount.click');
+        const flag = memoManager.memoSetting.settings.showCharacterCount;
+        memoManager.memoSetting.settings.showCharacterCount = !flag;
+        setUISetting(memoManager.getUISetting());
+      },
+      id: 'showCharacterCount',
+      type: 'checkbox',
+      checked: memoManager.memoSetting.settings.showCharacterCount,
     },
     {
       /* 面単位で切り替わる */
@@ -2201,6 +2219,10 @@ function setUISetting (settings) {
   debugTrace('setUISetting', { settings });
   mainWindow.webContents.send('set-settings', settings);
   mainWindow.setAlwaysOnTop(settings.topMost); // 常に手前に表示
+  if (mainWindowContextMenu !== null) {
+    mainWindowContextMenu.getMenuItemById('topmost').checked = settings.topMost;
+    mainWindowContextMenu.getMenuItemById('showCharacterCount').checked = settings.showCharacterCount;
+  }
 }
 
 // /**
