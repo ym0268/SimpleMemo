@@ -541,3 +541,16 @@ window.api.on('set-settings', (event, settings) => {
 window.api.onFindBarVisibility((visible) => {
   document.body.classList.toggle('find-enabled', visible);
 });
+
+window.api.onFocusMainEditor(() => {
+  getTextarea(nowPage).focus({ preventScroll: true });
+});
+
+window.api.onChangePageFromFind((forward) => {
+  if (forward) {
+    nextPage();
+  } else {
+    prevPage();
+  }
+  window.api.restoreFindFocus();
+});

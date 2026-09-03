@@ -1906,6 +1906,33 @@ ipcMain.handle('close-find-bar', (event) => {
   }
 });
 
+ipcMain.handle('focus-main-editor-from-find', (event) => {
+  if (mainWindow !== null && findView !== null && event.sender === findView.webContents) {
+    mainWindow.webContents.focus();
+    mainWindow.webContents.send('focus-main-editor');
+  }
+});
+
+ipcMain.handle('change-page-from-find', (event, forward) => {
+  if (mainWindow !== null &&
+      findView !== null &&
+      event.sender === findView.webContents &&
+      typeof forward === 'boolean') {
+    mainWindow.webContents.send('change-page-from-find', forward);
+  }
+});
+
+ipcMain.handle('restore-find-focus', (event) => {
+  if (mainWindow !== null &&
+      event.sender === mainWindow.webContents &&
+      findBarVisible &&
+      findView !== null &&
+      !findView.webContents.isDestroyed()) {
+    findView.webContents.focus();
+    findView.webContents.send('focus-find', false);
+  }
+});
+
 /**
  * ファイル保存
  *

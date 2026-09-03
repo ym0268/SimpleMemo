@@ -11,8 +11,11 @@ contextBridge.exposeInMainWorld('api', {
   setFontSize: (fontsize) => ipcRenderer.invoke('set-fontsize', fontsize),                    // フォントサイズ変更通知
   setLockStatusMain: (pageNum) => ipcRenderer.invoke('set-lock-status-main', pageNum),        // メインプロセスのロック状態を設定する
   updateLockStatusMain: () => ipcRenderer.invoke('update-lock-status-main'),                  // メインプロセスのロック状態を更新する
+  restoreFindFocus: () => ipcRenderer.invoke('restore-find-focus'),
 
   onFindBarVisibility: (callback) => ipcRenderer.on('find-bar-visibility', (e, visible) => callback(visible)),
+  onFocusMainEditor: (callback) => ipcRenderer.on('focus-main-editor', () => callback()),
+  onChangePageFromFind: (callback) => ipcRenderer.on('change-page-from-find', (e, forward) => callback(forward)),
   on: (channel, callback) => ipcRenderer.on(channel, (e, argv) => callback(e, argv)),
 });
 contextBridge.exposeInMainWorld('webUtils', webUtils);

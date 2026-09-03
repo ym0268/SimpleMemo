@@ -1,3 +1,5 @@
+/* global Mousetrap */
+
 let isComposing = false;
 let compositionEndSearchId = null;
 
@@ -26,8 +28,28 @@ function focusFindTextbox (selectAll) {
   }
 }
 
+/**
+ * 検索バー上で使用するキーバインドをセットする
+ */
+function setKeyBind () {
+  Mousetrap.bind('ctrl+t', () => {
+    window.findApi.focusMainEditor();
+    return false;
+  });
+  Mousetrap.bind('ctrl+tab', () => {
+    window.findApi.changePage(true);
+    return false;
+  });
+  Mousetrap.bind('ctrl+shift+tab', () => {
+    window.findApi.changePage(false);
+    return false;
+  });
+}
+
 window.onload = function () {
   const findTextbox = document.getElementById('find_textbox');
+
+  setKeyBind();
 
   findTextbox.addEventListener('compositionstart', () => {
     isComposing = true;
