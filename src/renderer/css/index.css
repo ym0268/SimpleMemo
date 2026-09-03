@@ -15,6 +15,10 @@ body.character-count-enabled textarea {
     bottom: 29px;
 }
 
+body.find-enabled textarea {
+    top: 76px;
+}
+
 #character_count_statusbar {
     position: fixed;
     left: 0;

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   setLockStatusMain: (pageNum) => ipcRenderer.invoke('set-lock-status-main', pageNum),        // メインプロセスのロック状態を設定する
   updateLockStatusMain: () => ipcRenderer.invoke('update-lock-status-main'),                  // メインプロセスのロック状態を更新する
 
+  onFindBarVisibility: (callback) => ipcRenderer.on('find-bar-visibility', (e, visible) => callback(visible)),
   on: (channel, callback) => ipcRenderer.on(channel, (e, argv) => callback(e, argv)),
 });
 contextBridge.exposeInMainWorld('webUtils', webUtils);

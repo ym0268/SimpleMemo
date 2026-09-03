@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self';">
+        <title>検索</title>
+        <link rel="stylesheet" href="css/find.css">
+        <script src="js/find.js" charset="utf-8"></script>
+    </head>
+    <body>
+        <div id="find_bar" role="search" aria-label="文字列検索">
+            <input type="search" id="find_textbox" spellcheck="false" placeholder="検索" aria-label="検索文字列">
+            <span id="find_result" aria-live="polite">0/0</span>
+            <button type="button" id="find_previous_button" title="前を検索" aria-label="前を検索">&#x2191;</button>
+            <button type="button" id="find_next_button" title="次を検索" aria-label="次を検索">&#x2193;</button>
+            <button type="button" id="find_close_button" title="検索を閉じる" aria-label="検索を閉じる">&#x00D7;</button>
+        </div>
+    </body>
+</html>

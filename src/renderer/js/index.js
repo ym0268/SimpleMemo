@@ -537,3 +537,7 @@ window.api.on('set-settings', (event, settings) => {
   }
   setCharacterCountStatusVisibility(settings.showCharacterCount);
 });
+
+window.api.onFindBarVisibility((visible) => {
+  document.body.classList.toggle('find-enabled', visible);
+});

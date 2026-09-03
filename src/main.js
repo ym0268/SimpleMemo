@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, ipcMain, dialog, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, session, WebContentsView } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
@@ -17,8 +17,12 @@ let localSettingWindow = null;
 let reloadEncodingWindow = null;
 let versionWindow = null;
 let mainWindowContextMenu = null;
+let findView = null;
+let findBarVisible = false;
+let currentFindRequestId = null;
 const MAX_PAGENUM = 3;
 const MAIN_WINDOW = path.join(__dirname, 'renderer/index.html');
+const FIND_WINDOW = path.join(__dirname, 'renderer/find.html');
 const MAIN_SETTING_WINDOW = path.join(__dirname, 'renderer/main_setting.html');       // 全体設定
 const MAIN_SETTING_URL = pathToFileURL(MAIN_SETTING_WINDOW).toString();
 const LOCAL_SETTING_WINDOW = path.join(__dirname, 'renderer/local_setting.html');      // 個別設定
@@ -1379,6 +1383,100 @@ class MemoSetting {
   }
 }
 
+/**
+ * 検索バーの表示位置をメインウィンドウに合わせる
+ */
+function updateFindViewBounds () {
+  if (mainWindow === null || findView === null) {
+    return;
+  }
+  const [width] = mainWindow.getContentSize();
+  findView.setBounds({
+    x: 5,
+    y: 39,
+    width: Math.max(width - 10, 1),
+    height: 32,
+  });
+}
+
+/**
+ * 検索バーを表示する
+ */
+function showFindBar () {
+  if (mainWindow === null || findView === null) {
+    return;
+  }
+  const restart = !findBarVisible;
+  findBarVisible = true;
+  updateFindViewBounds();
+  findView.setVisible(true);
+  mainWindow.webContents.send('find-bar-visibility', true);
+  findView.webContents.focus();
+  findView.webContents.send('focus-find', restart);
+}
+
+/**
+ * 検索バーを閉じる
+ */
+function hideFindBar () {
+  if (mainWindow === null || findView === null) {
+    return;
+  }
+  findBarVisible = false;
+  currentFindRequestId = null;
+  mainWindow.webContents.stopFindInPage('keepSelection');
+  findView.setVisible(false);
+  mainWindow.webContents.send('find-bar-visibility', false);
+  mainWindow.webContents.focus();
+}
+
+/**
+ * 検索バー用のWebContentsViewを作成する
+ */
+function createFindView () {
+  findView = new WebContentsView({
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, './preload_find.js'),
+    },
+  });
+  // findView.setBackgroundColor('#f4f4f4');
+  findView.setVisible(false);
+  updateFindViewBounds();
+  mainWindow.contentView.addChildView(findView);
+  findView.webContents.loadFile(FIND_WINDOW);
+  findView.webContents.on('did-finish-load', () => {
+    if (findBarVisible) {
+      showFindBar();
+    }
+  });
+}
+
+/**
+ * メイン画面の検索ショートカットを処理する
+ */
+function handleFindShortcut (event, input) {
+  if (input.type !== 'keyDown') {
+    return;
+  }
+  const key = input.key.toLowerCase();
+  if ((input.control || input.meta) && !input.alt && key === 'f') {
+    event.preventDefault();
+    showFindBar();
+  } else if (key === 'f3') {
+    event.preventDefault();
+    if (!findBarVisible) {
+      showFindBar();
+    } else {
+      findView.webContents.send('find-again', !input.shift);
+    }
+  } else if (key === 'escape' && findBarVisible) {
+    event.preventDefault();
+    hideFindBar();
+  }
+}
+
 function createWindow () {
   debugTrace('createWindow');
   mainWindow = new BrowserWindow({
@@ -1395,13 +1493,27 @@ function createWindow () {
   });
   mainWindow.setMenu(null);  // メニューバー非表示
   mainWindow.loadFile(MAIN_WINDOW);
+  mainWindow.webContents.on('before-input-event', handleFindShortcut);
+  mainWindow.webContents.on('found-in-page', (event, result) => {
+    if (result.requestId === currentFindRequestId && findView !== null && !findView.webContents.isDestroyed()) {
+      findView.webContents.send('find-in-page-result', result);
+    }
+  });
+  createFindView();
   if (USE_DEV_TOOL) {
     mainWindow.openDevTools();
   }
   mainWindow.on('closed', () => {
     debugTrace('mainWindow.closed');
+    if (findView !== null && !findView.webContents.isDestroyed()) {
+      findView.webContents.close();
+    }
+    findView = null;
+    findBarVisible = false;
+    currentFindRequestId = null;
     mainWindow = null;
   });
+  mainWindow.on('resize', updateFindViewBounds);
   mainWindow.on('close', (e) => {
     debugTrace('mainWindow.close', {
       eventType: e?.constructor?.name,
@@ -1650,6 +1762,14 @@ function createContextMenu () {
       type: 'separator',
     },
     {
+      label: '検索',
+      accelerator: 'CommandOrControl+F',
+      click: showFindBar,
+    },
+    {
+      type: 'separator',
+    },
+    {
       label: '常に手前に表示',
       click: () => {
         debugTrace('contextMenu.alwaysOnTop.click');
@@ -1757,6 +1877,33 @@ function updateLockStatusMain () {
 ipcMain.handle('show-main-context-menu', (event) => {
   debugTrace('ipc.show-main-context-menu', { senderId: event.sender.id });
   mainWindowContextMenu.popup(BrowserWindow.fromWebContents(event.sender));
+});
+
+ipcMain.handle('find-in-page', (event, query, options) => {
+  if (mainWindow === null || findView === null || event.sender !== findView.webContents) {
+    return null;
+  }
+  if (typeof query !== 'string' || query.length === 0) {
+    currentFindRequestId = null;
+    mainWindow.webContents.stopFindInPage('clearSelection');
+    findView.webContents.send('find-in-page-result', {
+      activeMatchOrdinal: 0,
+      matches: 0,
+    });
+    return null;
+  }
+
+  currentFindRequestId = mainWindow.webContents.findInPage(query, {
+    forward: options?.forward !== false,
+    findNext: options?.findNext === true,
+  });
+  return currentFindRequestId;
+});
+
+ipcMain.handle('close-find-bar', (event) => {
+  if (findView !== null && event.sender === findView.webContents) {
+    hideFindBar();
+  }
 });
 
 /**
@@ -2244,6 +2391,9 @@ ipcMain.handle('reload-encoding', (event, data) => {
 ipcMain.handle('set-pagenum', (event, pagenum) => {
   debugTrace('ipc.set-pagenum', { senderId: event.sender.id, pagenum });
   memoManager.setPageNum(pagenum);
+  if (findBarVisible && findView !== null && !findView.webContents.isDestroyed()) {
+    findView.webContents.send('restart-find');
+  }
 });
 
 /**
