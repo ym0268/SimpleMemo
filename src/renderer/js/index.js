@@ -240,10 +240,15 @@ function updateUnsavedStatus (unsaved) {
  * 指定した面の文字数を取得する
  * @param {Number} pageNum
  * @returns {Number} 文字数
+ * @note 改行コードは文字数に含めない
  */
+function countCharactersInText (text) {
+  return text.replace(/\r\n|\r|\n/g, '').length;
+}
+
 function countCharacters (pageNum) {
   const txtarea = getTextarea(pageNum);
-  return txtarea === null ? -1 : txtarea.value.length;
+  return txtarea === null ? -1 : countCharactersInText(txtarea.value);
 }
 
 /**
@@ -257,7 +262,8 @@ function countCharactersSelected (pageNum) {
     return -1;
   }
   const { selectionStart, selectionEnd } = txtarea;
-  return txtarea.value.substring(selectionStart, selectionEnd).length;
+  const selectedText = txtarea.value.substring(selectionStart, selectionEnd);
+  return countCharactersInText(selectedText);
 }
 
 /**
