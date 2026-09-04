@@ -23,7 +23,10 @@
     ],
     "win": {
       "icon": "resources/icon.ico",
-      "target": ["7z", "nsis"]
+      "target": [
+        "7z",
+        "nsis"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -36,7 +39,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^40.1.0",
+    "electron": "^44.2.0",
     "electron-builder": "^26.7.0",
     "eslint": "^9.39.2",
     "eslint-config-standard": "^15.0.1",
