@@ -39,7 +39,7 @@ const LOCAL_FONT_QUERY_SCRIPT = `
   })()
 `;
 
-const rootDirectory = PORTABLE_BUILD ? process.env.PORTABLE_EXECUTABLE_DIR : './';
+const rootDirectory = PORTABLE_BUILD ? process.env.PORTABLE_EXECUTABLE_DIR : (app.isPackaged ? app.getPath('userData') : process.cwd());
 const SETTING_FILENAME = path.join(rootDirectory, 'settings.json');              // 設定ファイル
 
 let memoManager = null;      // メモ管理オブジェクト

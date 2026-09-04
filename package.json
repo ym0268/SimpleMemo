@@ -1,6 +1,6 @@
 {
   "name": "simplememo",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Electron製のシンプルなメモ帳",
   "main": "main.js",
   "scripts": {
@@ -23,7 +23,14 @@
     ],
     "win": {
       "icon": "resources/icon.ico",
-      "target": "7z"
+      "target": ["7z", "nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SimpleMemo"
     }
   },
   "author": "",
