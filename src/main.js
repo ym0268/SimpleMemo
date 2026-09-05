@@ -763,10 +763,11 @@ class Memo {
 
       // 外部ファイルではなく、新規保存だと思われる場合はデフォルトエンコーディングをセット
       // もともと外部読込ファイルだった場合は変更しない（外部読込後にファイル名を変更した場合）
-      if ((tmpIsExternalFile === false) && (savepath !== this.savepath)) {
-        debugPrint(LOG_LEVEL.DEBUG, 'Memo.save', 'New file save. Set default encoding.', { defaultEncoding: this.defaultEncoding });
-        this.encoding = this.defaultEncoding;
-      }
+      // 不具合修正：個別設定で文字コードを変更した後、新規保存したときにその文字コード設定が効かないため、当該処理を無効化する
+      // if ((tmpIsExternalFile === false) && (savepath !== this.savepath)) {
+      //   debugPrint(LOG_LEVEL.DEBUG, 'Memo.save', 'New file save. Set default encoding.', { defaultEncoding: this.defaultEncoding });
+      //   this.encoding = this.defaultEncoding;
+      // }
 
       // 文字コード変換
       text = this.convertEncoding(text, { target: this.encoding, from: this.JS_ENCODE, update: false });
@@ -1116,15 +1117,25 @@ class MemoManager {
 
   /**
    * 全体設定をセットする
+   * @param {Object} data 設定情報
+   * @param {Boolean} forceEncoding 個別設定の文字コードを強制的に全体設定の文字コードに変更するか
+   * @return {MEMO_ERROR}
+   * 
+   * @note 起動時の設定ファイルからの読み込み時はforceEncodingをtrueにすることで、Memo.encodingに設定を反映させること。
    */
-  setGlobalSetting (data) {
+  setGlobalSetting (data, { forceEncoding = false } = {}) {
     debugTrace('MemoManager.setGlobalSetting', { data });
+    const previousEncoding = this.memoSetting.settings.encoding;
     const ret = this.memoSetting.set(data);
     if (ret === MEMO_ERROR.OK) {
+      const encodingChanged = previousEncoding !== this.memoSetting.settings.encoding;
       /* 各メモに値を反映 */
       for (let i = 0; i < this.memoNum; i++) {
         this.memoList[i].setDefaultSavePath(this.memoSetting.settings.savepath);
-        this.memoList[i].setDefaultEncoding(this.memoSetting.settings.encoding);
+        if (forceEncoding || encodingChanged) {
+          /* 文字コードは個別設定と全体設定で後勝ちにするため、全体設定で変更しなかった場合は何もしない */
+          this.memoList[i].setDefaultEncoding(this.memoSetting.settings.encoding);
+        }
         this.memoList[i].setAutoEncoding(this.memoSetting.settings.autoEncoding);
       }
     }
@@ -1162,7 +1173,7 @@ class MemoManager {
   loadSetting (filepath) {
     debugTrace('MemoManager.loadSetting', { filepath });
     const err = this.memoSetting.load(filepath);
-    this.setGlobalSetting(this.memoSetting.settings);
+    this.setGlobalSetting(this.memoSetting.settings, { forceEncoding: true });
     if (err !== MEMO_ERROR.OK) {
       debugPrint(LOG_LEVEL.WARN, 'MemoManager.loadSetting', 'Setting load failed. Current/default settings are used.', {
         error: err,
