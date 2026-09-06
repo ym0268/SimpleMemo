@@ -1278,7 +1278,8 @@ class MemoSetting {
         debugPrint(LOG_LEVEL.WARN, 'MemoSetting.validate', 'Save directory does not exist. Validation continues.', {
           savepath: data.savepath,
         });
-      } else if (!Number.isInteger(fontsize) || (fontsize <= 0)) {
+      }
+      if (!Number.isInteger(fontsize) || (fontsize <= 0)) {
         /* フォントサイズ確認エラー */
         error = MEMO_ERROR.INV_FONTSIZE;
         debugPrint(LOG_LEVEL.WARN, 'MemoSetting.validate', 'Invalid font size.', { error, fontsize });
