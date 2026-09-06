@@ -9,6 +9,7 @@ let unsaveList = null;
 // let scrollPosList = null;     /* 未使用 */
 let saveNotificationId = null;
 let lockStatus = null;
+let showCharacterCount = false;
 
 // TODO: 20220313 未保存フラグを立てる処理が未記載
 
@@ -19,6 +20,7 @@ window.onload = function () {
   setFontSize(fontSize);
   enableTabkey();
   enableDetectChange();
+  enableCharacterCountStatus();
   unsaveList = [...Array(MAX_PAGENUM).keys()].map(() => { return false; });    // 未保存リストをfalseで初期化
   // scrollPosList = [...Array(MAX_PAGENUM).keys()].map((d) => { return 0; });
   lockStatus = [...Array(MAX_PAGENUM).keys()].map(() => { return false; });
@@ -96,6 +98,7 @@ function setPage (pagenum) {
   updateLockStatus();
   // 未保存表示を更新
   updateUnsavedStatus(unsaveList[nowPage]);
+  updateCharacterCountStatus();
 }
 
 /**
@@ -231,6 +234,81 @@ function updateUnsavedStatus (unsaved) {
     title = '*' + title;
   }
   document.title = title;
+}
+
+/**
+ * 指定した面の文字数を取得する
+ * @param {Number} pageNum
+ * @returns {Number} 文字数
+ * @note 改行コードは文字数に含めない
+ */
+function countCharactersInText (text) {
+  return text.replace(/\r\n|\r|\n/g, '').length;
+}
+
+function countCharacters (pageNum) {
+  const txtarea = getTextarea(pageNum);
+  return txtarea === null ? -1 : countCharactersInText(txtarea.value);
+}
+
+/**
+ * 指定した面の選択文字数を取得する
+ * @param {Number} pageNum
+ * @returns {Number} 選択文字数
+ */
+function countCharactersSelected (pageNum) {
+  const txtarea = getTextarea(pageNum);
+  if (txtarea === null) {
+    return -1;
+  }
+  const { selectionStart, selectionEnd } = txtarea;
+  const selectedText = txtarea.value.substring(selectionStart, selectionEnd);
+  return countCharactersInText(selectedText);
+}
+
+/**
+ * 現在表示している面の文字数表示を更新する
+ */
+function updateCharacterCountStatus () {
+  const statusText = document.getElementById('character_count_text');
+  if (statusText === null || !showCharacterCount) {
+    return;
+  }
+
+  const total = countCharacters(nowPage);
+  const selected = countCharactersSelected(nowPage);
+  statusText.textContent = `文字数: ${total} / 選択: ${selected}`;
+}
+
+/**
+ * 文字数ステータスバーの表示状態を設定する
+ * @param {Boolean} visible 表示する場合はtrue
+ */
+function setCharacterCountStatusVisibility (visible) {
+  showCharacterCount = visible === true;
+  document.body.classList.toggle('character-count-enabled', showCharacterCount);
+
+  const statusbar = document.getElementById('character_count_statusbar');
+  if (statusbar !== null) {
+    statusbar.classList.toggle('is-hidden', !showCharacterCount);
+  }
+
+  updateCharacterCountStatus();
+}
+
+/**
+ * 文字数表示を更新するイベントリスナーを登録する
+ */
+function enableCharacterCountStatus () {
+  document.addEventListener('selectionchange', updateCharacterCountStatus);
+
+  for (let i = 0; i < MAX_PAGENUM; i++) {
+    const txtarea = getTextarea(i);
+    txtarea.addEventListener('keyup', updateCharacterCountStatus);
+    txtarea.addEventListener('mouseup', updateCharacterCountStatus);
+  }
+
+  updateCharacterCountStatus();
 }
 
 // function handleKeyPress(event){
@@ -371,6 +449,7 @@ function notifyChangeCB () {
   window.api.notifyChange(nowPage);
   unsaveList[nowPage] = true;        // 未保存フラグを立てる
   updateUnsavedStatus(true);          // 未保存表示に更新
+  updateCharacterCountStatus();
 }
 
 /**
@@ -424,6 +503,7 @@ window.api.on('file-load-result', (event, result) => {
     filenameBox.value = result.filename;
     unsaveList[result.pagenum] = false;
     updateUnsavedStatus(unsaveList[nowPage]);
+    updateCharacterCountStatus();
   }
 });
 
@@ -447,6 +527,7 @@ window.api.on('clear-memo', (event, data) => {
   filenameTextbox.value = '';
   unsaveList[pagenum] = false;
   updateUnsavedStatus(unsaveList[nowPage]);
+  updateCharacterCountStatus();
 });
 
 /**
@@ -460,4 +541,22 @@ window.api.on('set-settings', (event, settings) => {
     setFontSize(settings.fontsize);
     txtarea.style.fontFamily = settings.font;
   }
+  setCharacterCountStatusVisibility(settings.showCharacterCount);
+});
+
+window.api.onFindBarVisibility((visible) => {
+  document.body.classList.toggle('find-enabled', visible);
+});
+
+window.api.onFocusMainEditor(() => {
+  getTextarea(nowPage).focus({ preventScroll: true });
+});
+
+window.api.onChangePageFromFind((forward) => {
+  if (forward) {
+    nextPage();
+  } else {
+    prevPage();
+  }
+  window.api.restoreFindFocus();
 });

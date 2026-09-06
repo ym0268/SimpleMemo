@@ -28,6 +28,31 @@ select{
     width: 120px;
 }
 
+#font_selector{
+    width: 200px;
+}
+
+#font_preview{
+    display: inline-block;
+    min-width: 125px;
+    font-size: 16px;
+    line-height: 1;
+    vertical-align: middle;
+    white-space: pre;
+}
+
+#font_load_status{
+    display: block;
+    margin-top: 4px;
+    margin-left: 145px;
+    color: #555;
+    font-size: 12px;
+}
+
+#font_load_status[hidden]{
+    display: none;
+}
+
 .text{
     margin-right: 10px;
     flex-wrap: nowrap;
