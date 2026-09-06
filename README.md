@@ -71,6 +71,14 @@ npm run build   // Windows用にビルド
 ### Mac, Linux
 未確認  
 
+## ログ出力方法
+環境変数 `SIMPLEMEMO_LOG_LEVEL` を指定し、コマンドプロンプトから起動することでログ出力が可能です。
+```
+set SIMPLEMEMO_LOG_LEVEL=TRACE
+set SIMPLEMEMO_LOG_COLOR=OFF  // ログファイルに書き出す場合は追加で指定
+npm run start
+```
+
 ## 既知のバグ
 記載予定
 
