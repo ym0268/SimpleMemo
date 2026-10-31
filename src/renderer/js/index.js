@@ -14,6 +14,13 @@ let showCharacterCount = false;
 // TODO: 20220313 未保存フラグを立てる処理が未記載
 
 window.onload = function () {
+  const sheetButton = document.getElementById('sheet_button');
+  sheetButton.addEventListener('click', nextPage);
+  sheetButton.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    prevPage();
+  });
+  document.getElementById('save_button').addEventListener('click', saveFile);
   setContextMenu();
   setKeyBind();
   setDragAndDrop();
@@ -91,7 +98,7 @@ function setPage (pagenum) {
     }
   }
   // ボタンの番号を更新
-  document.getElementById('sheet_button').innerHTML = (nowPage + 1).toString();
+  document.getElementById('sheet_button').textContent = (nowPage + 1).toString();
   // メインプロセスに変更を通知
   window.api.setPageNum(nowPage);
   // ロック状態を更新

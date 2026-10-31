@@ -11,6 +11,25 @@ textarea {
     overflow-anchor: none;
 }
 
+#textarea_0 {
+    background-color: honeydew;
+}
+
+#textarea_1 {
+    background-color: oldlace;
+}
+
+#textarea_2 {
+    background-color: azure;
+}
+
+#filename_textbox_1,
+#filename_textbox_2,
+#textarea_1,
+#textarea_2 {
+    display: none;
+}
+
 body.character-count-enabled textarea {
     bottom: 29px;
 }
@@ -54,5 +73,6 @@ input {
 }
 
 body{
+    background-color: white;
     font-family: "Yu Gothic UI", "游ゴシック UI", YuGothic, "游ゴシック体", "ヒラギノ角ゴ Pro W3", "メイリオ", sans-serif;
 }

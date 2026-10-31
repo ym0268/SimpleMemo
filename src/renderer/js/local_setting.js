@@ -1,20 +1,18 @@
 let settings = null;
 
 window.onload = function () {
+  document.getElementById('cancel_button').addEventListener('click', cancel);
+  document.getElementById('ok_button').addEventListener('click', setSetting);
   /* メインプロセスにデータ取得要求 */
   window.api.getSetting();
 };
 
-// HTMLから呼び出すためLintは無効化
-// eslint-disable-next-line no-unused-vars
 function setSetting () {
   /* 設定をセットし、メインプロセスに送信 */
   settings.encoding = document.getElementById('new_encoding_selector').value;
   window.api.setSetting(settings);
 }
 
-// HTMLから呼び出すためLintは無効化
-// eslint-disable-next-line no-unused-vars
 function cancel () {
   window.close();
 }
@@ -29,6 +27,6 @@ function cancel () {
 window.api.on('local-setting-get-result', (event, result) => {
   settings = result;
 
-  document.getElementById('now_encoding_label').innerHTML = settings.encoding;
+  document.getElementById('now_encoding_label').textContent = settings.encoding;
   document.getElementById('new_encoding_selector').value = settings.encoding;
 });

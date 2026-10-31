@@ -3,6 +3,8 @@ let systemFontFamilies = [];
 
 /* 全体設定ウィンドウ */
 window.onload = function () {
+  document.getElementById('cancel_button').addEventListener('click', cancel);
+  document.getElementById('ok_button').addEventListener('click', setSetting);
   setDefaultValues();
   document.getElementById('font_selector').addEventListener('change', updateFontPreview);
   /* メインプロセスにデータ取得要求 */
@@ -10,8 +12,6 @@ window.onload = function () {
   loadSystemFonts();
 };
 
-// HTMLから呼び出すためLintは無効化
-// eslint-disable-next-line no-unused-vars
 function setSetting () {
   console.log('set');
 
@@ -31,8 +31,6 @@ function setSetting () {
   window.api.setSetting(settings);
 }
 
-// HTMLから呼び出すためLintは無効化
-// eslint-disable-next-line no-unused-vars
 function cancel () {
   window.close();
 }

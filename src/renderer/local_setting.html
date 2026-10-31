@@ -3,8 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <!-- TODO: move inline onclick handlers to addEventListener, move inline styles to CSS, then remove 'unsafe-inline' from CSP -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';">
     <link rel="stylesheet" href="css/main_setting.css">
     <script src="js/local_setting.js" charset="utf-8"></script>
     <title>個別設定 - SimpleMemo</title>
@@ -40,8 +39,8 @@
     </div>
     <footer>
         <!-- TODO: https://qiita.com/d0ne1s/items/5c629bc543e70ed2bf98 -->
-        <button class="footer_button" id="cancel_button" onclick="cancel()">キャンセル</button>
-        <button class="footer_button" id="ok_button" onclick="setSetting()">OK</button>
+        <button type="button" class="footer_button" id="cancel_button">キャンセル</button>
+        <button type="button" class="footer_button" id="ok_button">OK</button>
     </footer>
 
 </body>
