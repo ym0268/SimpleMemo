@@ -1,5 +1,7 @@
 /* global Mousetrap */
 
+const isMac = /Mac/.test(navigator.platform);
+
 let isComposing = false;
 let compositionEndSearchId = null;
 
@@ -32,7 +34,7 @@ function focusFindTextbox (selectAll) {
  * 検索バー上で使用するキーバインドをセットする
  */
 function setKeyBind () {
-  Mousetrap.bind('ctrl+t', () => {
+  Mousetrap.bind('mod+t', () => {
     window.findApi.focusMainEditor();
     return false;
   });
@@ -74,6 +76,9 @@ window.onload = function () {
     if (isComposing || event.isComposing) {
       return;
     }
+
+    const isCtrlOrCmd = (isMac ? (event.metaKey && !event.ctrlKey) : (event.ctrlKey && !event.metaKey)) && !event.altKey && !event.shiftKey;
+
     if (event.key === 'Enter') {
       event.preventDefault();
       startFind(!event.shiftKey, false);
@@ -83,7 +88,7 @@ window.onload = function () {
     } else if (event.key === 'F3') {
       event.preventDefault();
       startFind(!event.shiftKey, false);
-    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+    } else if (isCtrlOrCmd && event.key.toLowerCase() === 'f') {
       event.preventDefault();
       focusFindTextbox(true);
     }
