@@ -357,19 +357,34 @@ function enableCharacterCountStatus () {
  * キーバインドをセットする
  */
 function setKeyBind () {
-  Mousetrap.bind('ctrl+s', saveFile);
-  Mousetrap.bind('ctrl+tab', nextPage);
-  Mousetrap.bind('ctrl+shift+tab', prevPage);
-  Mousetrap.bind('ctrl+shift+.', () => {
+  Mousetrap.bind('mod+s', () => {
+    saveFile();
+    return false;
+  });
+  Mousetrap.bind('ctrl+tab', () => {
+    nextPage();
+    return false;
+  });
+  Mousetrap.bind('ctrl+shift+tab', () => {
+    prevPage();
+    return false;
+  });
+  Mousetrap.bind('mod+shift+.', () => {
     setFontSize(fontSize + 1);
+    return false;
   });
-  Mousetrap.bind('ctrl+shift+,', () => {
+  Mousetrap.bind('mod+shift+,', () => {
     setFontSize(fontSize - 1);
+    return false;
   });
-  Mousetrap.bind('ctrl+t', switchTextboxFocus);
-  Mousetrap.bind('ctrl+l', () => {
+  Mousetrap.bind('mod+t', () => {
+    switchTextboxFocus();
+    return false;
+  });
+  Mousetrap.bind('mod+l', () => {
     setLockStatus(nowPage);
     updateLockStatus();
+    return false;
   });
 }
 

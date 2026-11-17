@@ -39,27 +39,29 @@ Electron製のシンプルなメモ帳
 　改行コードを除いた文字数をカウントします。
 
 ### 文字列検索（おまけ）
-　Ctrl + Fで、現在表示しているメモの本文を検索できます。EnterまたはF3で次の一致、Shift + EnterまたはShift + F3で前の一致へ移動します。Escで検索バーを閉じます。  
+　Ctrl/Cmd + Fで、現在表示しているメモの本文を検索できます。EnterまたはF3で次の一致、Shift + EnterまたはShift + F3で前の一致へ移動します。Escで検索バーを閉じます。  
 　メモ帳内の全検索になるため、ファイル名テキストボックスやボタンの文字列も検索対象となる点はご容赦ください。
 
 ### ショートカットキー
 　下記のショートカットキーが使用可能です。  
-　- Ctrl + C：コピー  
-　- Ctrl + V: 貼り付け  
-　- Ctrl + X: 切り取り  
-　- Ctrl + S：保存  
-　- Ctrl + F：現在のメモを検索
+　- Ctrl/Cmd + C：コピー  
+　- Ctrl/Cmd + V: 貼り付け  
+　- Ctrl/Cmd + X: 切り取り  
+　- Ctrl/Cmd + S：保存  
+　- Ctrl/Cmd + F：現在のメモを検索
 　- Enter / F3：次の検索結果
 　- Shift + Enter / Shift + F3：前の検索結果
 　- Esc：検索を終了
-　- Ctrl + T: タイトルと本文テキストのカーソル移動  
-　- Ctrl + L: メモのロック  
+　- Ctrl/Cmd + T: タイトルと本文テキストのカーソル移動  
+　- Ctrl/Cmd + L: メモのロック  
 　- Ctrl + Tab: 次のメモ  
 　- Ctrl + Shift + Tab: 前のメモ  
-　- Ctrl + Shift + .(ピリオド): フォントサイズ拡大  
-　- Ctrl + Shift + ,: フォントサイズ縮小  
+　- Ctrl/Cmd + Shift + .(ピリオド): フォントサイズ拡大  
+　- Ctrl/Cmd + Shift + ,: フォントサイズ縮小  
 
 ## ビルド方法
+事前にNode.js環境を構築してください。
+
 ### Windows
 ```
 cd {リポジトリの場所}
@@ -68,14 +70,32 @@ npm run start   // アプリ起動
 npm run build   // Windows用にビルド
 ```
 
-### Mac, Linux
-未確認  
+### Mac
+```
+cd {リポジトリの場所}
+npm install     # 必要なパッケージのインストール
+npm run start   # アプリ起動
+# TODO: Mac用にビルド
+```
+
+### Linux
+TODO
+
 
 ## ログ出力方法
 環境変数 `SIMPLEMEMO_LOG_LEVEL` を指定し、コマンドプロンプトから起動することでログ出力が可能です。
+
+### Windows
 ```
 set SIMPLEMEMO_LOG_LEVEL=TRACE
 set SIMPLEMEMO_LOG_COLOR=OFF  // ログファイルに書き出す場合は追加で指定
+npm run start
+```
+
+### Mac
+```
+export SIMPLEMEMO_LOG_LEVEL=TRACE
+export SIMPLEMEMO_LOG_COLOR=OFF  # ログファイルに書き出す場合は追加で指定
 npm run start
 ```
 

@@ -1472,8 +1472,18 @@ function handleFindShortcut (event, input) {
   if (input.type !== 'keyDown') {
     return;
   }
+  if (input.isComposing) {  // IME入力中判定
+    return;
+  }
+
   const key = input.key.toLowerCase();
-  if ((input.control || input.meta) && !input.alt && key === 'f') {
+  const isCtrlOrCmd = ( // Mac対策（find.jsにも同じ判定あり）
+    process.platform === 'darwin'
+      ? (input.meta && !input.control)
+      : (input.control && !input.meta)
+  ) && !input.alt && !input.shift;
+
+  if (isCtrlOrCmd && key === 'f') {
     event.preventDefault();
     showFindBar();
   } else if (key === 'f3') {
