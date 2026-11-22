@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, ipcMain, dialog, session, WebContentsView } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, session, WebContentsView, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
@@ -1835,6 +1835,15 @@ function createContextMenu () {
       ],
     },
     {
+      /* "保存先を開く"は破壊的変更にならないためロック不要 */
+      label: '保存先を開く',
+      click: () => {
+        debugTrace('contextMenu.openMemoSaveDirectory.click', { pageNum: memoManager.pageNum });
+        openMemoSaveDirectory(memoManager.pageNum);
+      },
+      id: 'openSaveDir',
+    },
+    {
       type: 'separator',
     },
     {
@@ -1889,6 +1898,84 @@ function updateLockStatusMain () {
   mainWindowContextMenu.getMenuItemById('paste').enabled = !lockList[memoManager.pageNum];
   mainWindowContextMenu.getMenuItemById('lock').checked = lockList[memoManager.pageNum];
   mainWindowContextMenu.getMenuItemById('clear').enabled = !lockList[memoManager.pageNum];
+}
+
+/**
+ * 指定したメモの保存先を開く
+ * @param {Number} pageNum メモの面番号
+ */
+async function openMemoSaveDirectory (pageNum) {
+  debugTrace('openMemoSaveDirectory', { pageNum });
+
+  const memo = memoManager.memoList[pageNum];
+  if(!memo) {
+    debugPrint(LOG_LEVEL.ERROR, 'openMemoSaveDirectory', 'No memo found for the specified page number.', { pageNum });
+    return;
+  }
+
+  if (!memo.savedirpath) {
+    /* 保存先が設定されていない（空欄）ならエラー */
+    debugPrint(LOG_LEVEL.WARN, 'openMemoSaveDirectory', 'No save directory found for the specified memo.', { pageNum: pageNum });
+    dialog.showMessageBoxSync(mainWindow, {
+      message: '保存先が設定されていません\n\n' + '保存先：' + memo.savedirpath,
+      type: 'warning',
+      title: DIALOG_TITLE,
+    });
+    return;
+  }
+
+  /* 絶対パスに変換 */
+  const directory = path.resolve(memo.savedirpath);
+  debugPrint(LOG_LEVEL.DEBUG, 'openMemoSaveDirectory', 'Opening memo save directory.', {
+    savedirpath: memo.savedirpath,
+    directory: directory,
+  });
+
+  /* directoryがファイルパスならエラー */
+  try{
+    if (!fs.statSync(directory).isDirectory()) {
+      debugPrint(LOG_LEVEL.WARN, 'openMemoSaveDirectory', 'Specified save directory is not a directory.', {
+        pageNum: pageNum,
+        savedirpath: memo.savedirpath,
+        directory: directory,
+      });
+      dialog.showMessageBoxSync(mainWindow, {
+        message: '保存先がディレクトリではありません\n\n' + '保存先：' + directory,
+        type: 'warning',
+        title: DIALOG_TITLE,
+      });
+      return;
+    }
+  } catch (err) {
+    debugPrint(LOG_LEVEL.WARN, 'openMemoSaveDirectory', 'Error checking save directory.', {
+      pageNum: pageNum,
+      savedirpath: memo.savedirpath,
+      directory: directory,
+      error: err,
+    });
+    dialog.showMessageBoxSync(mainWindow, {
+      message: '保存先のフォルダを確認できません\n\n' + '保存先：' + directory,
+      type: 'warning',
+      title: DIALOG_TITLE,
+    });
+    return;
+  }
+
+  /* 保存先のフォルダを開く */
+  const error = await shell.openPath(directory);
+  if (error) {
+    debugPrint(LOG_LEVEL.WARN, 'openMemoSaveDirectory', 'Failed to open memo save directory.', {
+      pageNum: pageNum,
+      savedirpath: memo.savedirpath,
+      directory: directory,
+      error: error,
+    });
+    dialog.showMessageBoxSync(mainWindow, {
+      message: '保存先のフォルダを開くことができません\n\n' + '保存先：' + directory,
+      type: 'warning',
+      title: DIALOG_TITLE,
+    });
+  }
 }
 
 // ---------------------------------------------------
